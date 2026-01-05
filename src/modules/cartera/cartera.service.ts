@@ -1,5 +1,5 @@
 import { CarteraRepository } from './cartera.repository';
-import { KpiCartera, ClienteDeudaSummary, DetalleDocumento, NotaGestion, ClienteBusqueda } from './cartera.interface';
+import { KpiCartera, ClienteDeudaSummary, DetalleDocumento, NotaGestion, ClienteBusqueda, HistorialVenta, HistorialPago } from './cartera.interface';
 
 export class CarteraService {
     private repository: CarteraRepository;
@@ -19,21 +19,24 @@ export class CarteraService {
 
     async buscarClientes(termino: string): Promise<ClienteBusqueda[]> {
         if (!termino || termino.length < 3) {
-            return []; // Validación mínima
+            return [];
         }
         return await this.repository.buscarClientes(termino);
     }
 
-    async obtenerDetalleCliente(clienteId: number): Promise<{ documentos: DetalleDocumento[], notas: NotaGestion[] }> {
-        // Ejecutamos en paralelo para mejor rendimiento
-        const [documentos, notas] = await Promise.all([
+    async obtenerDetalleCliente(clienteId: number): Promise<{ documentos: DetalleDocumento[], notas: NotaGestion[], ventas: HistorialVenta[], pagos: HistorialPago[] }> {
+        const [documentos, notas, ventas, pagos] = await Promise.all([
             this.repository.getDetalleCompletoCliente(clienteId),
-            this.repository.getNotasGestion(clienteId)
+            this.repository.getNotasGestion(clienteId),
+            this.repository.getHistorialVentas(clienteId),
+            this.repository.getHistorialPagos(clienteId) // ¡Nueva llamada!
         ]);
 
         return {
             documentos,
-            notas
+            notas,
+            ventas,
+            pagos
         };
     }
 }

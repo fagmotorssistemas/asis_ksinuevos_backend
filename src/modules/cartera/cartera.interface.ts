@@ -7,39 +7,90 @@ export interface KpiCartera {
 }
 
 export interface ClienteDeudaSummary {
-    clienteId: number;       // CLI_CODIGO
-    nombre: string;          // CLI_NOMBRE
-    identificacion: string;  // 'S/N' (La vista no lo trae)
-    totalDeuda: number;      // Suma de DSP_SALDO
-    documentosVencidos: number; // Conteo de docs vencidos
-    diasMoraMaximo: number;  // 0 (Dato aproximado)
-    telefono: string | null; // CLI_TELEFONO1
-    email: string | null;    // null
+    clienteId: number;       
+    nombre: string;          
+    identificacion: string;  
+    totalDeuda: number;      
+    documentosVencidos: number; 
+    diasMoraMaximo: number;  
+    telefonos: {
+        principal: string | null;
+        secundario: string | null;
+        celular: string | null;
+    };
+    categoria: string;
+    zonaCobranza: string;
 }
 
 export interface DetalleDocumento {
-    tipoDocumento: string;   // TPD_NOMBRE
-    numeroDocumento: string; // DDO_DOCTRAN
-    fechaEmision: Date;      // DDO_FECHA_EMI
-    fechaVencimiento: Date;  // DDO_FECHA_VEN
-    diasVencidos: number;    // 1 si está vencido, 0 si no
-    valorOriginal: number;   // DSP_V_INICIAL
-    saldoPendiente: number;  // DSP_SALDO
-    agente: string;          // 'S/N'
-    tienda: string;          // ALM_NOMBRE o 'Matriz'
+    tipoDocumento: string;   
+    numeroDocumento: string; 
+    numeroFisico: string;
+    numeroCuota: number;
+    fechaEmision: string;      
+    fechaVencimiento: string;  
+    diasMora: number;
+    estadoVencimiento: string;
+    valorOriginal: number;   
+    saldoPendiente: number;  
+    tienda: string;          
+    observacionDoc: string;
+    categoriaCliente: string;
+    cobrador: string;
+    // Agregamos estos campos para poder extraerlos en el servicio
+    nombreCliente?: string;
+    identificacion?: string;
+    telefono1?: string;
+    telefono2?: string;
+    telefono3?: string;
 }
 
 export interface NotaGestion {
-    fecha: Date;             // CREA_FECHA
-    usuario: string;         // CREA_USR
-    observacion: string;     // OCC_OBSERVACION
-    fechaProximaLlamada?: Date; // OCC_FECLLAMAR
+    fecha: string;
+    usuario: string;         
+    observacion: string;     
+    fechaProximaLlamada?: string; 
 }
 
-// Nueva interfaz para el buscador
+export interface HistorialVenta {
+    fecha: string;
+    documento: string;
+    producto: string;
+    referencia: string;
+    valorTotal: number;
+    vendedor: string;
+    observaciones: string;
+}
+
+export interface HistorialPago {
+    fecha: string;
+    numeroRecibo: string;
+    concepto: string;
+    montoTotal: number;
+    formaPago: string;
+    referenciaPago: string;
+    usuario: string;
+}
+
 export interface ClienteBusqueda {
     clienteId: number;
     nombre: string;
     identificacion: string;
     telefono: string | null;
+}
+
+export interface ClienteDetalleResponse {
+    // Datos en la raíz para facilitar el uso en el frontend
+    nombre?: string;
+    identificacion?: string;
+    categoria?: string;
+    zonaCobranza?: string;
+    telefono1?: string;
+    telefono2?: string;
+    telefono3?: string;
+    
+    documentos: DetalleDocumento[];
+    notas: NotaGestion[];
+    ventas: HistorialVenta[];
+    pagos: HistorialPago[];
 }
