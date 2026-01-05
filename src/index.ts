@@ -1,12 +1,10 @@
+import 'dotenv/config'; // Asegura cargar variables de entorno primero
+import 'express-async-errors'; // <--- AGREGADO: Manejo de errores asíncronos para Express 4
 import express, { Request, Response } from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { initializePool, closePool } from './config/oracle';
 import { testDatabaseConnection, listViews } from './modules/test/test.controller';
-// 👇 CORRECCIÓN: Agregué la 's' al final del nombre del archivo (.routes)
 import carteraRoutes from './modules/cartera/cartera.routes'; 
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,12 +21,11 @@ app.get('/ping', (req: Request, res: Response) => {
     });
 });
 
-// Rutas de prueba con Oracle (Mantenemos estas para diagnóstico rápido)
+// Rutas de prueba con Oracle
 app.get('/api/test-db', testDatabaseConnection);
 app.get('/api/list-views', listViews); 
 
-// 2. Rutas Principales de la Aplicación
-// Aquí montamos el router de cartera bajo el prefijo /api/cartera
+// Rutas Principales
 app.use('/api/cartera', carteraRoutes);
 
 const startServer = async () => {
@@ -72,9 +69,9 @@ const startServer = async () => {
         };
 
         // Escuchar señales de terminación
-        process.on('SIGINT', () => gracefulShutdown('SIGINT'));   // Ctrl+C
-        process.on('SIGTERM', () => gracefulShutdown('SIGTERM')); // Kill command
-        process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2')); // nodemon restart
+        process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+        process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+        process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2'));
 
         // Manejo de errores no capturados
         process.on('uncaughtException', (error) => {

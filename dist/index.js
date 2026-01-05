@@ -3,14 +3,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+require("dotenv/config"); // Asegura cargar variables de entorno primero
+require("express-async-errors"); // <--- AGREGADO: Manejo de errores asíncronos para Express 4
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
-const dotenv_1 = __importDefault(require("dotenv"));
 const oracle_1 = require("./config/oracle");
 const test_controller_1 = require("./modules/test/test.controller");
-// 👇 CORRECCIÓN: Agregué la 's' al final del nombre del archivo (.routes)
 const cartera_routes_1 = __importDefault(require("./modules/cartera/cartera.routes"));
-dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
 app.use((0, cors_1.default)());
@@ -23,11 +22,10 @@ app.get('/ping', (req, res) => {
         timestamp: new Date().toISOString()
     });
 });
-// Rutas de prueba con Oracle (Mantenemos estas para diagnóstico rápido)
+// Rutas de prueba con Oracle
 app.get('/api/test-db', test_controller_1.testDatabaseConnection);
 app.get('/api/list-views', test_controller_1.listViews);
-// 2. Rutas Principales de la Aplicación
-// Aquí montamos el router de cartera bajo el prefijo /api/cartera
+// Rutas Principales
 app.use('/api/cartera', cartera_routes_1.default);
 const startServer = async () => {
     try {
@@ -65,9 +63,9 @@ const startServer = async () => {
             }, 10000);
         };
         // Escuchar señales de terminación
-        process.on('SIGINT', () => gracefulShutdown('SIGINT')); // Ctrl+C
-        process.on('SIGTERM', () => gracefulShutdown('SIGTERM')); // Kill command
-        process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2')); // nodemon restart
+        process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+        process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+        process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2'));
         // Manejo de errores no capturados
         process.on('uncaughtException', (error) => {
             console.error('❌ Excepción no capturada:', error);
