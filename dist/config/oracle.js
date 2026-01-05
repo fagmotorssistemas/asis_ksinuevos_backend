@@ -1,38 +1,40 @@
-import oracledb from 'oracledb';
-import dotenv from 'dotenv';
-
-dotenv.config();
-
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getPoolStats = exports.closePool = exports.getConnection = exports.initializePool = void 0;
+const oracledb_1 = __importDefault(require("oracledb"));
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
 // ⚠️ CRÍTICO: Inicializar Oracle Client ANTES de cualquier cosa
 // Debe estar ANTES de cualquier llamada a oracledb
 let clientInitialized = false;
-
 try {
     // Usamos 'any' para evitar errores de TypeScript (TS2724) por cambios en la librería
-    let clientOpts: any = {};
-
+    let clientOpts = {};
     // 🕵️‍♂️ DETECCIÓN AUTOMÁTICA DE SISTEMA OPERATIVO
     if (process.platform === 'win32') {
         // Estás en tu Laptop (Windows)
         clientOpts = { libDir: 'C:\\oracle\\instantclient_19_29' };
-    } 
+    }
     // Si es Linux (Servidor), dejamos clientOpts vacío. 
     // El sistema usará automáticamente las librerías que instalamos con yum (/usr/lib/oracle/...)
-
-    oracledb.initOracleClient(clientOpts);
-    
+    oracledb_1.default.initOracleClient(clientOpts);
     clientInitialized = true;
     console.log(`✅ Oracle Client inicializado en Modo Thick (${process.platform === 'win32' ? 'Windows Path' : 'Linux System Libs'})`);
-    
-} catch (err: any) {
+}
+catch (err) {
     if (err.message.includes('DPI-1047')) {
         clientInitialized = true;
         console.log('ℹ️  Oracle Client ya estaba inicializado por el sistema');
-    } else if (err.message.includes('NJS-009')) {
+    }
+    else if (err.message.includes('NJS-009')) {
         // NJS-009 es el código de error para "initOracleClient ya fue llamado"
         clientInitialized = true;
         console.log('ℹ️  Oracle Client ya estaba inicializado');
-    } else {
+    }
+    else {
         console.error('❌ ERROR CRÍTICO inicializando Oracle Client:', err);
         console.error('💡 Posibles causas:');
         console.error('   1. En Windows: La ruta C:\\oracle... no existe');
@@ -41,13 +43,11 @@ try {
         throw err;
     }
 }
-
 // Verificar que realmente estamos en modo Thick
 if (!clientInitialized) {
     throw new Error('❌ No se pudo inicializar Oracle Client. La conexión a Oracle 11g fallará.');
 }
-
-const dbConfig: oracledb.PoolAttributes = {
+const dbConfig = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     connectString: process.env.DB_CONNECTION_STRING,
@@ -58,23 +58,19 @@ const dbConfig: oracledb.PoolAttributes = {
     queueTimeout: 10000,
     enableStatistics: true
 };
-
-let pool: oracledb.Pool | null = null;
-
-export const initializePool = async () => {
+let pool = null;
+const initializePool = async () => {
     try {
         // Verificar que el cliente esté inicializado
         if (!clientInitialized) {
             throw new Error('Oracle Client no está inicializado. No se puede conectar a Oracle 11g.');
         }
-
         // Si ya existe un pool, ciérralo primero
         if (pool) {
             console.log('⚠️  Pool existente detectado, cerrando...');
             await pool.close(10);
         }
-        
-        pool = await oracledb.createPool(dbConfig);
+        pool = await oracledb_1.default.createPool(dbConfig);
         console.log('✅ Pool de conexiones a Oracle 11g inicializado');
         console.log('📊 Configuración del Pool:', {
             user: dbConfig.user,
@@ -83,8 +79,8 @@ export const initializePool = async () => {
             poolMax: dbConfig.poolMax,
             modo: 'Thick (compatible con Oracle 11g)'
         });
-        
-    } catch (err: any) {
+    }
+    catch (err) {
         console.error('❌ Error al inicializar el pool:', err);
         console.error('💡 Verifica:');
         console.error('   - Usuario y contraseña en .env');
@@ -93,36 +89,37 @@ export const initializePool = async () => {
         throw err;
     }
 };
-
-export const getConnection = async () => {
+exports.initializePool = initializePool;
+const getConnection = async () => {
     if (!pool) {
         throw new Error('❌ Pool no inicializado. Llama a initializePool() primero.');
     }
-    
     try {
         const connection = await pool.getConnection();
         console.log('🔌 Conexión obtenida del pool (Modo Thick)');
         return connection;
-    } catch (err: any) {
+    }
+    catch (err) {
         console.error('❌ Error obteniendo conexión:', err.message);
         throw err;
     }
 };
-
-export const closePool = async () => {
+exports.getConnection = getConnection;
+const closePool = async () => {
     if (pool) {
         try {
             console.log('🔒 Cerrando pool de conexiones...');
             await pool.close(10);
             pool = null;
             console.log('✅ Pool cerrado correctamente');
-        } catch (err) {
+        }
+        catch (err) {
             console.error('❌ Error cerrando pool:', err);
         }
     }
 };
-
-export const getPoolStats = () => {
+exports.closePool = closePool;
+const getPoolStats = () => {
     if (pool) {
         try {
             return {
@@ -134,10 +131,12 @@ export const getPoolStats = () => {
                 status: 'active',
                 mode: clientInitialized ? 'Thick' : 'Thin'
             };
-        } catch (err) {
+        }
+        catch (err) {
             console.error('⚠️ No se pudieron obtener estadísticas del pool:', err);
             return { status: 'unknown' };
         }
     }
     return { status: 'not_initialized' };
 };
+exports.getPoolStats = getPoolStats;
