@@ -115,6 +115,74 @@ export class CarteraRepository {
     }
 
     /**
+     * TODOS LOS DEUDORES (ALFABÉTICO)
+     * Nuevo método solicitado
+     */
+    async getAllDeudoresAlfabetico(limit: number = 50): Promise<ClienteDeudaSummary[]> {
+        let connection;
+        try {
+            connection = await getConnection();
+
+            // Misma estructura base pero ordenado por NOMBRE
+            const sql = `
+                SELECT * FROM (
+                    SELECT 
+                        CLI_CODIGO,
+                        MAX(CLI_NOMBRE) as NOMBRE,
+                        MAX(CLI_ID) as IDENTIFICACION,
+                        MAX(CLI_TELEFONO1) as TELF1,
+                        MAX(CLI_TELEFONO2) as TELF2,
+                        MAX(CLI_TELEFONO3) as TELF3,
+                        MAX(CAT_NOMBRE) as CATEGORIA,
+                        MAX(CCL_NOMBRE) as COBRADOR,
+                        SUM(DSP_SALDO) as TOTAL_DEUDA,
+                        COUNT(CASE WHEN TIPO_VENCIMIENTO = 'VENCIDO' THEN 1 END) as DOCS_VENCIDOS,
+                        MIN(DDO_FECHA_VEN) as FECHA_MAS_ANTIGUA
+                    FROM DATA_USR.V_CXC_CARTERA_TOTAL
+                    WHERE DSP_SALDO > 0.01
+                    AND CLI_EMPRESA = :empresa
+                    GROUP BY CLI_CODIGO
+                    ORDER BY NOMBRE ASC  -- <--- CAMBIO: Orden Alfabético
+                ) WHERE ROWNUM <= :limit
+            `;
+
+            const result: any = await connection.execute(sql, [CODIGO_EMPRESA, limit], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+            
+            const today = new Date().getTime();
+
+            return result.rows.map((row: any) => {
+                let diasMora = 0;
+                if(row.FECHA_MAS_ANTIGUA) {
+                    const diff = today - new Date(row.FECHA_MAS_ANTIGUA).getTime();
+                    diasMora = Math.ceil(diff / (1000 * 3600 * 24));
+                }
+
+                return {
+                    clienteId: row.CLI_CODIGO,
+                    nombre: row.NOMBRE,
+                    identificacion: row.IDENTIFICACION || 'S/N', 
+                    totalDeuda: row.TOTAL_DEUDA,
+                    documentosVencidos: row.DOCS_VENCIDOS,
+                    diasMoraMaximo: diasMora > 0 ? diasMora : 0,
+                    telefonos: {
+                        principal: row.TELF1,
+                        secundario: row.TELF2,
+                        celular: row.TELF3 
+                    },
+                    categoria: row.CATEGORIA || 'General',
+                    zonaCobranza: row.COBRADOR || 'Oficina'
+                };
+            });
+
+        } catch (error) {
+            console.error('Error en getAllDeudoresAlfabetico:', error);
+            throw error;
+        } finally {
+            if (connection) await connection.close();
+        }
+    }
+
+    /**
      * BUSCADOR DE CLIENTES
      */
     async buscarClientes(termino: string): Promise<ClienteBusqueda[]> {
@@ -161,7 +229,6 @@ export class CarteraRepository {
 
     /**
      * DETALLE COMPLETO (KARDEX)
-     * CORREGIDO: Ahora incluye CLI_NOMBRE y CLI_ID en la consulta
      */
     async getDetalleCompletoCliente(clienteId: number): Promise<DetalleDocumento[]> {
         let connection;
@@ -170,8 +237,8 @@ export class CarteraRepository {
 
             const sql = `
                 SELECT 
-                    CLI_NOMBRE,     -- AGREGADO
-                    CLI_ID,         -- AGREGADO
+                    CLI_NOMBRE,
+                    CLI_ID,
                     TPD_NOMBRE,
                     DDO_DOCTRAN,
                     COMPROBANTE1,
@@ -205,8 +272,8 @@ export class CarteraRepository {
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
 
                 return {
-                    nombreCliente: row.CLI_NOMBRE, // Mapeamos el nombre
-                    identificacion: row.CLI_ID,    // Mapeamos la ID
+                    nombreCliente: row.CLI_NOMBRE, 
+                    identificacion: row.CLI_ID,    
                     tipoDocumento: row.TPD_NOMBRE || 'Doc',
                     numeroDocumento: row.DDO_DOCTRAN,
                     numeroFisico: row.COMPROBANTE1 || row.DDO_DOCTRAN,

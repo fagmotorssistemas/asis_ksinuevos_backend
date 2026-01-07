@@ -22,6 +22,18 @@ export const getTopDeudores = async (req: Request, res: Response) => {
     }
 };
 
+// Nuevo controlador para lista alfabética
+export const getTodosDeudores = async (req: Request, res: Response) => {
+    try {
+        // Por defecto traemos 100 si no especifican
+        const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
+        const deudores = await carteraService.obtenerTodosDeudores(limit);
+        res.json({ success: true, count: deudores.length, data: deudores });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 export const buscarClientes = async (req: Request, res: Response) => {
     try {
         const termino = req.query.q as string;

@@ -17,6 +17,12 @@ export class CarteraService {
         return await this.repository.getTopDeudores(safeLimit);
     }
 
+    // Nuevo método para obtener todos los deudores alfabéticamente
+    async obtenerTodosDeudores(limite: number): Promise<ClienteDeudaSummary[]> {
+        const safeLimit = limite > 500 ? 500 : limite; 
+        return await this.repository.getAllDeudoresAlfabetico(safeLimit);
+    }
+
     async buscarClientes(termino: string): Promise<ClienteBusqueda[]> {
         if (!termino || termino.length < 3) {
             return [];
@@ -29,7 +35,7 @@ export class CarteraService {
             this.repository.getDetalleCompletoCliente(clienteId),
             this.repository.getNotasGestion(clienteId),
             this.repository.getHistorialVentas(clienteId),
-            this.repository.getHistorialPagos(clienteId) // ¡Nueva llamada!
+            this.repository.getHistorialPagos(clienteId)
         ]);
 
         return {
