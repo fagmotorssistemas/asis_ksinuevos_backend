@@ -1,21 +1,36 @@
 import { Router } from 'express';
-import { getKpiResumen, getTopDeudores, getClienteDetalle, buscarClientes, getTodosDeudores } from './cartera.controller';
+import { 
+    getKpiResumen, 
+    getTopDeudores, 
+    getClienteDetalle, 
+    buscarClientes, 
+    getTodosDeudores,
+    getClientePorCedula,
+    getCreditosCliente,
+    getAmortizacionCredito
+} from './cartera.controller';
 
 const router = Router();
 
-// GET /api/cartera/kpi
+// --- RUTAS EXISTENTES ---
 router.get('/kpi', getKpiResumen);
-
-// GET /api/cartera/top-deudores?limit=5
 router.get('/top-deudores', getTopDeudores);
-
-// NUEVA RUTA: GET /api/cartera/todos-alfabetico?limit=100
 router.get('/todos-alfabetico', getTodosDeudores);
-
-// GET /api/cartera/buscar?q=SANCHEZ
 router.get('/buscar', buscarClientes);
-
-// GET /api/cartera/clientes/:id
 router.get('/clientes/:id', getClienteDetalle);
+
+// --- NUEVAS RUTAS PARA AMORTIZACIÓN ---
+
+// 1. Buscar cliente por Cédula (Devuelve el ID interno)
+// Ejemplo: /api/cartera/cliente-cedula/01048...
+router.get('/cliente-cedula/:cedula', getClientePorCedula);
+
+// 2. Ver préstamos de un cliente (Usa el ID interno obtenido arriba)
+// Ejemplo: /api/cartera/creditos/104
+router.get('/creditos/:id', getCreditosCliente);
+
+// 3. Ver Tabla de Amortización (Usa el ID largo del crédito)
+// Ejemplo: /api/cartera/amortizacion/100000...592
+router.get('/amortizacion/:idCredito', getAmortizacionCredito);
 
 export default router;

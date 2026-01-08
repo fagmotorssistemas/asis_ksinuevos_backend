@@ -80,7 +80,6 @@ export interface ClienteBusqueda {
 }
 
 export interface ClienteDetalleResponse {
-    // Datos en la raíz para facilitar el uso en el frontend
     nombre?: string;
     identificacion?: string;
     categoria?: string;
@@ -93,4 +92,22 @@ export interface ClienteDetalleResponse {
     notas: NotaGestion[];
     ventas: HistorialVenta[];
     pagos: HistorialPago[];
+}
+
+// --- NUEVAS INTERFACES PARA AMORTIZACIÓN ---
+
+export interface CreditoResumen {
+    idCredito: string; // Usamos string porque el ID es muy largo
+    numeroOperacion: number;
+    montoOriginal: number;
+    fechaInicio?: string;
+}
+
+export interface CuotaAmortizacion {
+    numeroCuota: number;
+    fechaVencimiento: string;
+    capital: number;
+    interes: number;
+    valorCuota: number;
+    saldoPendiente: number; // Columna TOTAL
 }

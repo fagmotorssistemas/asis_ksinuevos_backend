@@ -1,14 +1,11 @@
 import oracledb from 'oracledb';
 import { getConnection } from '../../config/oracle';
-import { ClienteBusqueda, ClienteDeudaSummary, DetalleDocumento, KpiCartera, NotaGestion, HistorialVenta, HistorialPago } from './cartera.interface';
+import { ClienteBusqueda, ClienteDeudaSummary, DetalleDocumento, KpiCartera, NotaGestion, HistorialVenta, HistorialPago, CreditoResumen, CuotaAmortizacion } from './cartera.interface';
 
 const CODIGO_EMPRESA = 162; 
 
 export class CarteraRepository {
 
-    /**
-     * KPI GLOBAL
-     */
     async getGlobalKPIs(): Promise<KpiCartera> {
         let connection;
         try {
@@ -48,9 +45,6 @@ export class CarteraRepository {
         }
     }
 
-    /**
-     * TOP DEUDORES
-     */
     async getTopDeudores(limit: number = 10): Promise<ClienteDeudaSummary[]> {
         let connection;
         try {
@@ -114,16 +108,11 @@ export class CarteraRepository {
         }
     }
 
-    /**
-     * TODOS LOS DEUDORES (ALFABÉTICO)
-     * Nuevo método solicitado
-     */
     async getAllDeudoresAlfabetico(limit: number = 50): Promise<ClienteDeudaSummary[]> {
         let connection;
         try {
             connection = await getConnection();
 
-            // Misma estructura base pero ordenado por NOMBRE
             const sql = `
                 SELECT * FROM (
                     SELECT 
@@ -142,7 +131,7 @@ export class CarteraRepository {
                     WHERE DSP_SALDO > 0.01
                     AND CLI_EMPRESA = :empresa
                     GROUP BY CLI_CODIGO
-                    ORDER BY NOMBRE ASC  -- <--- CAMBIO: Orden Alfabético
+                    ORDER BY NOMBRE ASC
                 ) WHERE ROWNUM <= :limit
             `;
 
@@ -182,9 +171,6 @@ export class CarteraRepository {
         }
     }
 
-    /**
-     * BUSCADOR DE CLIENTES
-     */
     async buscarClientes(termino: string): Promise<ClienteBusqueda[]> {
         let connection;
         try {
@@ -227,9 +213,6 @@ export class CarteraRepository {
         }
     }
 
-    /**
-     * DETALLE COMPLETO (KARDEX)
-     */
     async getDetalleCompletoCliente(clienteId: number): Promise<DetalleDocumento[]> {
         let connection;
         try {
@@ -302,9 +285,6 @@ export class CarteraRepository {
         }
     }
 
-    /**
-     * NOTAS DE GESTIÓN
-     */
     async getNotasGestion(clienteId: number): Promise<NotaGestion[]> {
         let connection;
         try {
@@ -339,9 +319,6 @@ export class CarteraRepository {
         }
     }
 
-    /**
-     * HISTORIAL DE VENTAS
-     */
     async getHistorialVentas(clienteId: number): Promise<HistorialVenta[]> {
         let connection;
         try {
@@ -404,9 +381,6 @@ export class CarteraRepository {
         }
     }
 
-    /**
-     * HISTORIAL DE PAGOS
-     */
     async getHistorialPagos(clienteId: number): Promise<HistorialPago[]> {
         let connection;
         try {
@@ -450,6 +424,189 @@ export class CarteraRepository {
         } catch (error) {
             console.error('Error en getHistorialPagos:', error);
             return [];
+        } finally {
+            if (connection) await connection.close();
+        }
+    }
+
+    async getClienteIdByCedula(cedula: string): Promise<ClienteBusqueda | null> {
+        let connection;
+        try {
+            connection = await getConnection();
+            
+            const sql = `
+                SELECT CLI_CODIGO, CLI_NOMBRE, CLI_RUC_CEDULA, CLI_TELEFONO1
+                FROM DATA_USR.CLIENTE
+                WHERE CLI_RUC_CEDULA = :cedula
+                AND ROWNUM = 1
+            `;
+
+            const result: any = await connection.execute(sql, [cedula], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+            
+            if (result.rows.length === 0) return null;
+            
+            const row = result.rows[0];
+            return {
+                clienteId: row.CLI_CODIGO,
+                nombre: row.CLI_NOMBRE,
+                identificacion: row.CLI_RUC_CEDULA,
+                telefono: row.CLI_TELEFONO1
+            };
+
+        } catch (error) {
+            console.error('Error en getClienteIdByCedula:', error);
+            throw error;
+        } finally {
+            if (connection) await connection.close();
+        }
+    }
+
+    // =========================================================
+    //   FIX FINAL: ESTRATEGIA DE BÚSQUEDA TRIPLE (IMPLACABLE)
+    // =========================================================
+
+    /**
+     * OBTENER CRÉDITOS ACTIVOS - ESTRATEGIA TRIPLE FALLBACK
+     * 1. Busca por Cédula (La más precisa para unificar)
+     * 2. Busca por ID Directo (Si la cédula falla o no existe)
+     * 3. Busca por Nombre Similar (Si hay error de IDs duplicados/fantasmas)
+     */
+    async getCreditosByClienteId(clienteId: number): Promise<CreditoResumen[]> {
+        let connection;
+        try {
+            connection = await getConnection();
+            
+            // Recolectar datos del cliente
+            const sqlInfo = `SELECT CLI_RUC_CEDULA, CLI_NOMBRE FROM DATA_USR.CLIENTE WHERE CLI_CODIGO = :id`;
+            const resultInfo: any = await connection.execute(sqlInfo, [clienteId], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+            
+            let rawCedula = "";
+            let rawNombre = "";
+            let rows: any[] = [];
+
+            if (resultInfo.rows.length) {
+                rawCedula = resultInfo.rows[0].CLI_RUC_CEDULA;
+                rawNombre = resultInfo.rows[0].CLI_NOMBRE;
+            }
+            
+            // --- ESTRATEGIA 1: Cédula ---
+            if (rawCedula && rawCedula.trim() !== '') {
+                console.log(`[DEBUG] Buscando créditos por Cédula: ${rawCedula}`);
+                let cedulaBase = rawCedula;
+                if (cedulaBase.length === 13 && cedulaBase.endsWith('001')) {
+                    cedulaBase = cedulaBase.substring(0, 10);
+                }
+                
+                const sqlA = `
+                    SELECT 
+                        TO_CHAR(TA.CCO_CODIGO) as ID_CREDITO,
+                        MAX(TA.CCO_NUMERO) as CCO_NUMERO,
+                        SUM(TA.ABONOCAPITAL) as MONTO_ORIGINAL,
+                        MIN(TA.DDO_FECHA_VEN) as FECHA_INICIO
+                    FROM DATA_USR.V_TABLAAMORTIZACION TA
+                    JOIN DATA_USR.CLIENTE CLI ON TA.CCO_CODCLIPRO = CLI.CLI_CODIGO
+                    WHERE CLI.CLI_RUC_CEDULA LIKE :cedula || '%'
+                    AND TA.CCO_EMPRESA = :empresa
+                    GROUP BY TA.CCO_CODIGO
+                    ORDER BY CCO_NUMERO DESC
+                `;
+                const resultA: any = await connection.execute(sqlA, [cedulaBase, CODIGO_EMPRESA], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+                rows = resultA.rows;
+            }
+
+            // --- ESTRATEGIA 2: ID Directo ---
+            if (rows.length === 0) {
+                console.log(`[DEBUG] Fallback ID Directo: ${clienteId}`);
+                const sqlB = `
+                    SELECT 
+                        TO_CHAR(TA.CCO_CODIGO) as ID_CREDITO,
+                        MAX(TA.CCO_NUMERO) as CCO_NUMERO,
+                        SUM(TA.ABONOCAPITAL) as MONTO_ORIGINAL,
+                        MIN(TA.DDO_FECHA_VEN) as FECHA_INICIO
+                    FROM DATA_USR.V_TABLAAMORTIZACION TA
+                    WHERE TA.CCO_CODCLIPRO = :id
+                    AND TA.CCO_EMPRESA = :empresa
+                    GROUP BY TA.CCO_CODIGO
+                    ORDER BY CCO_NUMERO DESC
+                `;
+                const resultB: any = await connection.execute(sqlB, [clienteId, CODIGO_EMPRESA], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+                rows = resultB.rows;
+            }
+
+            // --- ESTRATEGIA 3: Nombre (La Desesperada) ---
+            // Si el ID de cartera es diferente al comercial y la cédula está vacía en cartera.
+            if (rows.length === 0 && rawNombre && rawNombre.length > 5) {
+                console.log(`[DEBUG] Fallback Nombre Similar: ${rawNombre}`);
+                
+                // Tomamos las primeras 2 partes del nombre para evitar errores por espacios extra
+                const partesNombre = rawNombre.trim().split(' ').slice(0, 2).join(' ');
+                
+                const sqlC = `
+                    SELECT 
+                        TO_CHAR(TA.CCO_CODIGO) as ID_CREDITO,
+                        MAX(TA.CCO_NUMERO) as CCO_NUMERO,
+                        SUM(TA.ABONOCAPITAL) as MONTO_ORIGINAL,
+                        MIN(TA.DDO_FECHA_VEN) as FECHA_INICIO
+                    FROM DATA_USR.V_TABLAAMORTIZACION TA
+                    JOIN DATA_USR.CLIENTE CLI ON TA.CCO_CODCLIPRO = CLI.CLI_CODIGO
+                    WHERE UPPER(CLI.CLI_NOMBRE) LIKE UPPER(:nombre || '%')
+                    AND TA.CCO_EMPRESA = :empresa
+                    GROUP BY TA.CCO_CODIGO
+                    ORDER BY CCO_NUMERO DESC
+                `;
+                // Usamos LIKE con el inicio del nombre
+                const resultC: any = await connection.execute(sqlC, [partesNombre, CODIGO_EMPRESA], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+                rows = resultC.rows;
+            }
+
+            return rows.map((row: any) => ({
+                idCredito: row.ID_CREDITO,
+                numeroOperacion: row.CCO_NUMERO,
+                montoOriginal: row.MONTO_ORIGINAL || 0, 
+                fechaInicio: row.FECHA_INICIO ? new Date(row.FECHA_INICIO).toISOString() : undefined
+            }));
+
+        } catch (error) {
+            console.error('Error en getCreditosByClienteId:', error);
+            throw error;
+        } finally {
+            if (connection) await connection.close();
+        }
+    }
+
+    async getTablaAmortizacion(creditoId: string): Promise<CuotaAmortizacion[]> {
+        let connection;
+        try {
+            connection = await getConnection();
+            
+            // Filtramos por el ID del crédito (string)
+            const sql = `
+                SELECT 
+                    DDO_PAGO,
+                    DDO_FECHA_VEN,
+                    ABONOCAPITAL,
+                    DDO_INTERES,
+                    DDO_MONTO,
+                    TOTAL
+                FROM DATA_USR.V_TABLAAMORTIZACION
+                WHERE TO_CHAR(CCO_CODIGO) = :id
+                ORDER BY DDO_PAGO ASC
+            `;
+
+            const result: any = await connection.execute(sql, [creditoId], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+
+            return result.rows.map((row: any) => ({
+                numeroCuota: row.DDO_PAGO,
+                fechaVencimiento: row.DDO_FECHA_VEN ? new Date(row.DDO_FECHA_VEN).toISOString() : '',
+                capital: row.ABONOCAPITAL,
+                interes: row.DDO_INTERES,
+                valorCuota: row.DDO_MONTO,
+                saldoPendiente: row.TOTAL
+            }));
+
+        } catch (error) {
+            console.error('Error en getTablaAmortizacion:', error);
+            throw error;
         } finally {
             if (connection) await connection.close();
         }

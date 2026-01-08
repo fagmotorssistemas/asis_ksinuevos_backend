@@ -1,5 +1,5 @@
 import { CarteraRepository } from './cartera.repository';
-import { KpiCartera, ClienteDeudaSummary, DetalleDocumento, NotaGestion, ClienteBusqueda, HistorialVenta, HistorialPago } from './cartera.interface';
+import { KpiCartera, ClienteDeudaSummary, DetalleDocumento, NotaGestion, ClienteBusqueda, HistorialVenta, HistorialPago, CreditoResumen, CuotaAmortizacion } from './cartera.interface';
 
 export class CarteraService {
     private repository: CarteraRepository;
@@ -17,7 +17,6 @@ export class CarteraService {
         return await this.repository.getTopDeudores(safeLimit);
     }
 
-    // Nuevo método para obtener todos los deudores alfabéticamente
     async obtenerTodosDeudores(limite: number): Promise<ClienteDeudaSummary[]> {
         const safeLimit = limite > 500 ? 500 : limite; 
         return await this.repository.getAllDeudoresAlfabetico(safeLimit);
@@ -44,5 +43,19 @@ export class CarteraService {
             ventas,
             pagos
         };
+    }
+
+    // --- NUEVOS MÉTODOS PARA AMORTIZACIÓN ---
+
+    async buscarClientePorCedula(cedula: string): Promise<ClienteBusqueda | null> {
+        return await this.repository.getClienteIdByCedula(cedula);
+    }
+
+    async listarCreditosCliente(clienteId: number): Promise<CreditoResumen[]> {
+        return await this.repository.getCreditosByClienteId(clienteId);
+    }
+
+    async obtenerAmortizacion(creditoId: string): Promise<CuotaAmortizacion[]> {
+        return await this.repository.getTablaAmortizacion(creditoId);
     }
 }

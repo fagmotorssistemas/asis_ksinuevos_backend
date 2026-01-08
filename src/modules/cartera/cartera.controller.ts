@@ -22,10 +22,8 @@ export const getTopDeudores = async (req: Request, res: Response) => {
     }
 };
 
-// Nuevo controlador para lista alfabética
 export const getTodosDeudores = async (req: Request, res: Response) => {
     try {
-        // Por defecto traemos 100 si no especifican
         const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
         const deudores = await carteraService.obtenerTodosDeudores(limit);
         res.json({ success: true, count: deudores.length, data: deudores });
@@ -61,6 +59,49 @@ export const getClienteDetalle = async (req: Request, res: Response) => {
 
         const detalle = await carteraService.obtenerDetalleCliente(clienteId);
         res.json({ success: true, data: detalle });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ==========================================
+//   NUEVOS CONTROLADORES DE AMORTIZACIÓN
+// ==========================================
+
+// 1. Obtener ID del cliente dado su RUC/Cédula
+export const getClientePorCedula = async (req: Request, res: Response) => {
+    try {
+        const cedula = req.params.cedula;
+        const cliente = await carteraService.buscarClientePorCedula(cedula);
+        
+        if (!cliente) {
+            res.status(404).json({ success: false, message: "Cliente no encontrado" });
+            return;
+        }
+
+        res.json({ success: true, data: cliente });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// 2. Listar créditos de un cliente (por ID de cliente)
+export const getCreditosCliente = async (req: Request, res: Response) => {
+    try {
+        const clienteId = parseInt(req.params.id);
+        const creditos = await carteraService.listarCreditosCliente(clienteId);
+        res.json({ success: true, count: creditos.length, data: creditos });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// 3. Ver tabla de amortización (por ID de crédito largo)
+export const getAmortizacionCredito = async (req: Request, res: Response) => {
+    try {
+        const creditoId = req.params.idCredito; // Viene como string
+        const tabla = await carteraService.obtenerAmortizacion(creditoId);
+        res.json({ success: true, count: tabla.length, data: tabla });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
     }
