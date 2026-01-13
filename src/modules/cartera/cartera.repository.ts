@@ -4,6 +4,75 @@ import { ClienteBusqueda, ClienteDeudaSummary, DetalleDocumento, KpiCartera, Not
 
 const CODIGO_EMPRESA = 162; 
 
+// --- HELPERS PRIVADOS PARA LIMPIEZA DE DATOS ---
+
+// Convierte formatos "feos" de Oracle (01-DEC-25, 27/11/2025) a ISO String seguro
+const parseOracleDate = (dateVal: any): string | undefined => {
+    if (!dateVal) return undefined;
+
+    // 1. Si ya es un objeto Date válido
+    if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {
+        return dateVal.toISOString();
+    }
+
+    // 2. Si es string, intentamos limpiarlo
+    if (typeof dateVal === 'string') {
+        const limpia = dateVal.trim();
+
+        // Caso A: Formato DD/MM/YYYY (Latino)
+        if (limpia.includes('/')) {
+            const partes = limpia.split('/');
+            if (partes.length === 3) {
+                // Forzamos formato YYYY-MM-DD
+                const [dia, mes, anio] = partes;
+                return new Date(`${anio}-${mes}-${dia}`).toISOString();
+            }
+        }
+
+        // Caso B: Formato DD-MON-YY (Oracle Default: 01-DEC-25)
+        if (limpia.includes('-')) {
+            const partes = limpia.split('-');
+            if (partes.length === 3) {
+                let [dia, mesStr, anio] = partes;
+                
+                // Corregir año de 2 dígitos (25 -> 2025)
+                if (anio.length === 2) anio = `20${anio}`;
+
+                // Mapeo de meses en Inglés (común en Oracle) y Español
+                const meses: {[key: string]: string} = {
+                    'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04', 'MAY': '05', 'JUN': '06',
+                    'JUL': '07', 'AUG': '08', 'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12',
+                    'ENE': '01', 'ABR': '04', 'AGO': '08', 'DIC': '12'
+                };
+                
+                const mesNum = meses[mesStr.toUpperCase()] || mesStr;
+                
+                // Intentar crear fecha con lo que tenemos
+                const fecha = new Date(`${anio}-${mesNum}-${dia}`);
+                if (!isNaN(fecha.getTime())) return fecha.toISOString();
+            }
+        }
+        
+        // Último intento: parse nativo
+        const intento = new Date(limpia);
+        if (!isNaN(intento.getTime())) return intento.toISOString();
+    }
+
+    return undefined;
+};
+
+// Limpia strings de dinero (" 9,722.22" -> 9722.22)
+const parseMoney = (val: any): number => {
+    if (typeof val === 'number') return val;
+    if (!val) return 0;
+    // Eliminamos todo excepto dígitos, punto y signo menos.
+    // Asumimos que la coma es separador de miles y la borramos.
+    const limpio = val.toString().replace(/,/g, '').trim(); 
+    const numero = parseFloat(limpio);
+    return isNaN(numero) ? 0 : numero;
+};
+
+
 export class CarteraRepository {
 
     async getGlobalKPIs(): Promise<KpiCartera> {
@@ -45,7 +114,7 @@ export class CarteraRepository {
         }
     }
 
-    async getTopDeudores(limit: number = 10): Promise<ClienteDeudaSummary[]> {
+    async getTopDeudores(limit: number = 300): Promise<ClienteDeudaSummary[]> {
         let connection;
         try {
             connection = await getConnection();
@@ -79,8 +148,12 @@ export class CarteraRepository {
             return result.rows.map((row: any) => {
                 let diasMora = 0;
                 if(row.FECHA_MAS_ANTIGUA) {
-                    const diff = today - new Date(row.FECHA_MAS_ANTIGUA).getTime();
-                    diasMora = Math.ceil(diff / (1000 * 3600 * 24));
+                    // Usamos el parser robusto también aquí por seguridad
+                    const fechaStr = parseOracleDate(row.FECHA_MAS_ANTIGUA);
+                    if (fechaStr) {
+                        const diff = today - new Date(fechaStr).getTime();
+                        diasMora = Math.ceil(diff / (1000 * 3600 * 24));
+                    }
                 }
 
                 return {
@@ -108,7 +181,7 @@ export class CarteraRepository {
         }
     }
 
-    async getAllDeudoresAlfabetico(limit: number = 50): Promise<ClienteDeudaSummary[]> {
+    async getAllDeudoresAlfabetico(limit: number = 300): Promise<ClienteDeudaSummary[]> {
         let connection;
         try {
             connection = await getConnection();
@@ -142,8 +215,11 @@ export class CarteraRepository {
             return result.rows.map((row: any) => {
                 let diasMora = 0;
                 if(row.FECHA_MAS_ANTIGUA) {
-                    const diff = today - new Date(row.FECHA_MAS_ANTIGUA).getTime();
-                    diasMora = Math.ceil(diff / (1000 * 3600 * 24));
+                     const fechaStr = parseOracleDate(row.FECHA_MAS_ANTIGUA);
+                     if (fechaStr) {
+                        const diff = today - new Date(fechaStr).getTime();
+                        diasMora = Math.ceil(diff / (1000 * 3600 * 24));
+                     }
                 }
 
                 return {
@@ -250,9 +326,14 @@ export class CarteraRepository {
             const today = new Date();
 
             return result.rows.map((row: any) => {
-                const fechaVen = new Date(row.DDO_FECHA_VEN);
-                const diffTime = today.getTime() - fechaVen.getTime();
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                const fechaVenStr = parseOracleDate(row.DDO_FECHA_VEN);
+                let diffDays = 0;
+                
+                if (fechaVenStr) {
+                    const fechaVen = new Date(fechaVenStr);
+                    const diffTime = today.getTime() - fechaVen.getTime();
+                    diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                }
 
                 return {
                     nombreCliente: row.CLI_NOMBRE, 
@@ -261,8 +342,8 @@ export class CarteraRepository {
                     numeroDocumento: row.DDO_DOCTRAN,
                     numeroFisico: row.COMPROBANTE1 || row.DDO_DOCTRAN,
                     numeroCuota: row.DDO_PAGO || 1,
-                    fechaEmision: row.DDO_FECHA_EMI ? new Date(row.DDO_FECHA_EMI).toISOString() : new Date().toISOString(),
-                    fechaVencimiento: row.DDO_FECHA_VEN ? new Date(row.DDO_FECHA_VEN).toISOString() : new Date().toISOString(),
+                    fechaEmision: parseOracleDate(row.DDO_FECHA_EMI) || new Date().toISOString(),
+                    fechaVencimiento: fechaVenStr || new Date().toISOString(),
                     diasMora: diffDays > 0 ? diffDays : 0,
                     estadoVencimiento: row.TIPO_VENCIMIENTO,
                     valorOriginal: row.DSP_V_INICIAL,
@@ -305,10 +386,10 @@ export class CarteraRepository {
             const result: any = await connection.execute(sql, [clienteId, CODIGO_EMPRESA], { outFormat: oracledb.OUT_FORMAT_OBJECT });
 
             return result.rows.map((row: any) => ({
-                fecha: row.CREA_FECHA ? new Date(row.CREA_FECHA).toISOString() : new Date().toISOString(),
+                fecha: parseOracleDate(row.CREA_FECHA) || new Date().toISOString(),
                 usuario: row.CREA_USR,
                 observacion: row.OCC_OBSERVACION,
-                fechaProximaLlamada: row.OCC_FECLLAMAR ? new Date(row.OCC_FECLLAMAR).toISOString() : undefined
+                fechaProximaLlamada: parseOracleDate(row.OCC_FECLLAMAR)
             }));
 
         } catch (error) {
@@ -364,7 +445,7 @@ export class CarteraRepository {
             );
 
             return resultVentas.rows.map((row: any) => ({
-                fecha: row.FECHA ? new Date(row.FECHA).toISOString() : new Date().toISOString(),
+                fecha: parseOracleDate(row.FECHA) || new Date().toISOString(),
                 documento: row.NUMERO_COMPROBANTE,
                 producto: row.PRODUCTO || 'Vehículo sin descripción',
                 referencia: row.REFERENCIA || 'S/N',
@@ -412,7 +493,7 @@ export class CarteraRepository {
             );
 
             return result.rows.map((row: any) => ({
-                fecha: row.CCO_FECHA ? new Date(row.CCO_FECHA).toISOString() : new Date().toISOString(),
+                fecha: parseOracleDate(row.CCO_FECHA) || new Date().toISOString(),
                 numeroRecibo: row.CCO_DOCTRAN || String(row.CCO_NUMERO),
                 concepto: row.CCO_CONCEPTO || 'Abono a deuda',
                 montoTotal: row.DFP_MONTO || 0,
@@ -461,109 +542,33 @@ export class CarteraRepository {
         }
     }
 
-    // =========================================================
-    //   FIX FINAL: ESTRATEGIA DE BÚSQUEDA TRIPLE (IMPLACABLE)
-    // =========================================================
-
-    /**
-     * OBTENER CRÉDITOS ACTIVOS - ESTRATEGIA TRIPLE FALLBACK
-     * 1. Busca por Cédula (La más precisa para unificar)
-     * 2. Busca por ID Directo (Si la cédula falla o no existe)
-     * 3. Busca por Nombre Similar (Si hay error de IDs duplicados/fantasmas)
-     */
     async getCreditosByClienteId(clienteId: number): Promise<CreditoResumen[]> {
         let connection;
         try {
             connection = await getConnection();
             
-            // Recolectar datos del cliente
-            const sqlInfo = `SELECT CLI_RUC_CEDULA, CLI_NOMBRE FROM DATA_USR.CLIENTE WHERE CLI_CODIGO = :id`;
-            const resultInfo: any = await connection.execute(sqlInfo, [clienteId], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+            // DDO_FECHA_VEN a veces viene texto "01-DEC-25". MIN() lo saca como texto.
+            const sql = `
+                SELECT 
+                    TO_CHAR(TA.CCO_CODIGO) as ID_CREDITO,
+                    ast_gen.numero_comprobante(MAX(TA.CCO_EMPRESA), TA.CCO_CODIGO) as CCO_NUMERO,
+                    SUM(TA.ABONOCAPITAL) as MONTO_ORIGINAL,
+                    MIN(TA.DDO_FECHA_VEN) as FECHA_INICIO
+                FROM DATA_USR.V_TABLAAMORTIZACION TA
+                WHERE TA.CCO_CODCLIPRO = :id
+                AND TA.CCO_EMPRESA = :empresa
+                GROUP BY TA.CCO_CODIGO
+                ORDER BY FECHA_INICIO DESC
+            `;
+
+            const result: any = await connection.execute(sql, [clienteId, CODIGO_EMPRESA], { outFormat: oracledb.OUT_FORMAT_OBJECT });
             
-            let rawCedula = "";
-            let rawNombre = "";
-            let rows: any[] = [];
-
-            if (resultInfo.rows.length) {
-                rawCedula = resultInfo.rows[0].CLI_RUC_CEDULA;
-                rawNombre = resultInfo.rows[0].CLI_NOMBRE;
-            }
-            
-            // --- ESTRATEGIA 1: Cédula ---
-            if (rawCedula && rawCedula.trim() !== '') {
-                console.log(`[DEBUG] Buscando créditos por Cédula: ${rawCedula}`);
-                let cedulaBase = rawCedula;
-                if (cedulaBase.length === 13 && cedulaBase.endsWith('001')) {
-                    cedulaBase = cedulaBase.substring(0, 10);
-                }
-                
-                const sqlA = `
-                    SELECT 
-                        TO_CHAR(TA.CCO_CODIGO) as ID_CREDITO,
-                        MAX(TA.CCO_NUMERO) as CCO_NUMERO,
-                        SUM(TA.ABONOCAPITAL) as MONTO_ORIGINAL,
-                        MIN(TA.DDO_FECHA_VEN) as FECHA_INICIO
-                    FROM DATA_USR.V_TABLAAMORTIZACION TA
-                    JOIN DATA_USR.CLIENTE CLI ON TA.CCO_CODCLIPRO = CLI.CLI_CODIGO
-                    WHERE CLI.CLI_RUC_CEDULA LIKE :cedula || '%'
-                    AND TA.CCO_EMPRESA = :empresa
-                    GROUP BY TA.CCO_CODIGO
-                    ORDER BY CCO_NUMERO DESC
-                `;
-                const resultA: any = await connection.execute(sqlA, [cedulaBase, CODIGO_EMPRESA], { outFormat: oracledb.OUT_FORMAT_OBJECT });
-                rows = resultA.rows;
-            }
-
-            // --- ESTRATEGIA 2: ID Directo ---
-            if (rows.length === 0) {
-                console.log(`[DEBUG] Fallback ID Directo: ${clienteId}`);
-                const sqlB = `
-                    SELECT 
-                        TO_CHAR(TA.CCO_CODIGO) as ID_CREDITO,
-                        MAX(TA.CCO_NUMERO) as CCO_NUMERO,
-                        SUM(TA.ABONOCAPITAL) as MONTO_ORIGINAL,
-                        MIN(TA.DDO_FECHA_VEN) as FECHA_INICIO
-                    FROM DATA_USR.V_TABLAAMORTIZACION TA
-                    WHERE TA.CCO_CODCLIPRO = :id
-                    AND TA.CCO_EMPRESA = :empresa
-                    GROUP BY TA.CCO_CODIGO
-                    ORDER BY CCO_NUMERO DESC
-                `;
-                const resultB: any = await connection.execute(sqlB, [clienteId, CODIGO_EMPRESA], { outFormat: oracledb.OUT_FORMAT_OBJECT });
-                rows = resultB.rows;
-            }
-
-            // --- ESTRATEGIA 3: Nombre (La Desesperada) ---
-            // Si el ID de cartera es diferente al comercial y la cédula está vacía en cartera.
-            if (rows.length === 0 && rawNombre && rawNombre.length > 5) {
-                console.log(`[DEBUG] Fallback Nombre Similar: ${rawNombre}`);
-                
-                // Tomamos las primeras 2 partes del nombre para evitar errores por espacios extra
-                const partesNombre = rawNombre.trim().split(' ').slice(0, 2).join(' ');
-                
-                const sqlC = `
-                    SELECT 
-                        TO_CHAR(TA.CCO_CODIGO) as ID_CREDITO,
-                        MAX(TA.CCO_NUMERO) as CCO_NUMERO,
-                        SUM(TA.ABONOCAPITAL) as MONTO_ORIGINAL,
-                        MIN(TA.DDO_FECHA_VEN) as FECHA_INICIO
-                    FROM DATA_USR.V_TABLAAMORTIZACION TA
-                    JOIN DATA_USR.CLIENTE CLI ON TA.CCO_CODCLIPRO = CLI.CLI_CODIGO
-                    WHERE UPPER(CLI.CLI_NOMBRE) LIKE UPPER(:nombre || '%')
-                    AND TA.CCO_EMPRESA = :empresa
-                    GROUP BY TA.CCO_CODIGO
-                    ORDER BY CCO_NUMERO DESC
-                `;
-                // Usamos LIKE con el inicio del nombre
-                const resultC: any = await connection.execute(sqlC, [partesNombre, CODIGO_EMPRESA], { outFormat: oracledb.OUT_FORMAT_OBJECT });
-                rows = resultC.rows;
-            }
-
-            return rows.map((row: any) => ({
-                idCredito: row.ID_CREDITO,
-                numeroOperacion: row.CCO_NUMERO,
-                montoOriginal: row.MONTO_ORIGINAL || 0, 
-                fechaInicio: row.FECHA_INICIO ? new Date(row.FECHA_INICIO).toISOString() : undefined
+            return result.rows.map((row: any) => ({
+                idCredito: String(row.ID_CREDITO).trim(), 
+                numeroOperacion: row.CCO_NUMERO, 
+                montoOriginal: parseMoney(row.MONTO_ORIGINAL), 
+                // AQUI ESTABA EL ERROR: Usamos el parser robusto
+                fechaInicio: parseOracleDate(row.FECHA_INICIO) 
             }));
 
         } catch (error) {
@@ -574,35 +579,107 @@ export class CarteraRepository {
         }
     }
 
-    async getTablaAmortizacion(creditoId: string): Promise<CuotaAmortizacion[]> {
+    // =========================================================
+    //   FIX CRÍTICO 2: TABLA DE AMORTIZACIÓN (ACTUALIZADO)
+    //   - Usa lógica de Saldo Pendiente Real con Window Functions
+    //   - Calcula amortización usando prg_usr.prueba
+    // =========================================================
+    async getTablaAmortizacion(clienteId: number, creditoId: string): Promise<CuotaAmortizacion[]> {
         let connection;
         try {
             connection = await getConnection();
             
-            // Filtramos por el ID del crédito (string)
+            // Esta es la nueva consulta robusta adaptada a TypeScript
+            // Nota: Hemos reemplazado los valores fijos por :empresa, :clienteId y :creditoId
             const sql = `
                 SELECT 
-                    DDO_PAGO,
-                    DDO_FECHA_VEN,
-                    ABONOCAPITAL,
-                    DDO_INTERES,
-                    DDO_MONTO,
-                    TOTAL
-                FROM DATA_USR.V_TABLAAMORTIZACION
-                WHERE TO_CHAR(CCO_CODIGO) = :id
-                ORDER BY DDO_PAGO ASC
+                    DDO_FECHA_EMI, 
+                    FEC_VENCE AS DDO_FECHA_VEN,
+                    NCUOTA,
+                    CAPITAL,       
+                    SSO_INTERES AS DDO_INTERES,
+                    CUOTA AS DDO_PAGO,
+                    
+                    -- Lógica de Saldo Pendiente (Case con Window Functions)
+                    CASE WHEN CAPITAL - ABONO_CAPITAL < 0 THEN
+                        SUM(DDO_MONTO) OVER () - SUM(DDO_MONTO) OVER (
+                            ORDER BY ncuota
+                            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                        )
+                    ELSE
+                        (CAPITAL - ABONO_CAPITAL)
+                    END AS SALDO_CAPITAL,
+
+                    Abono_Capital AS ABONOCAPITAL,
+                    cco_codclipro, 
+                    CCO_EMPRESA, 
+                    CCO_CODIGO
+                
+                FROM (
+                    SELECT 
+                        a.ddo_pago, 
+                        to_char(a.ddo_fecha_ven, 'DD/MM/RRRR') as Fec_Vence, 
+                        a.ddo_monto,
+                        decode(c.cco_codclipro, null, a.ddo_codclipro, c.cco_codclipro) as cco_codclipro, 
+                        A.DDO_FECHA_EMI,
+                        a.ddo_pago as nCuota,
+                        -- Calculo complejo de Capital
+                        prg_usr.prueba.valor_amortizacion(a.ddo_empresa, a.ddo_cco_comproba, a.ddo_pago, 1) + nvl(b.tot_financia_adi, 0) - nvl(b.tot_descuento1, 0) as Capital,
+                        -- Formato de Interes
+                        to_char(a.ddo_interes, '999G990D99') as sso_interes,
+                        -- Formato de Monto
+                        to_char(prg_usr.prueba.valor_amortizacion(a.ddo_empresa, a.ddo_cco_comproba, a.ddo_pago, 2), '999G990D99') as monto,
+                        -- Formato de Cuota Total
+                        to_char(a.ddo_monto - nvl(a.ddo_gastos, 0) - nvl(a.ddo_gastos1, 0) + nvl(a.ddo_gastos1, 0), '999G990D99') as Cuota,
+                        to_char(a.ddo_gastos1, '999G990D99') as MesGracia,
+                        a.ddo_monto - a.ddo_interes - a.ddo_gastos1 AS Abono_Capital,
+                        C.CCO_EMPRESA, 
+                        C.CCO_CODIGO
+                    
+                    FROM ddocumento a, total b, ccomproba c
+                    
+                    WHERE a.ddo_empresa = :empresa
+                      AND C.CCO_ESTADO <> 9
+                      AND C.CCO_TIPODOC IN (1, 118, 122)
+                      
+                      -- Filtros dinámicos
+                      AND a.ddo_codclipro = :clienteId
+                      AND a.ddo_cco_comproba = :creditoId  
+                      
+                      AND a.ddo_pago > 0
+                      AND a.ddo_empresa = b.tot_empresa(+)
+                      AND a.ddo_cco_comproba = b.tot_cco_comproba(+)
+                      AND a.ddo_cco_comproba = c.cco_codigo
+                      AND a.ddo_empresa = c.cco_empresa
+                ) 
+                ORDER BY NCUOTa
             `;
 
-            const result: any = await connection.execute(sql, [creditoId], { outFormat: oracledb.OUT_FORMAT_OBJECT });
+            // Ejecutamos la consulta pasando los parámetros
+            const result: any = await connection.execute(
+                sql, 
+                [CODIGO_EMPRESA, clienteId, creditoId], 
+                { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            );
 
-            return result.rows.map((row: any) => ({
-                numeroCuota: row.DDO_PAGO,
-                fechaVencimiento: row.DDO_FECHA_VEN ? new Date(row.DDO_FECHA_VEN).toISOString() : '',
-                capital: row.ABONOCAPITAL,
-                interes: row.DDO_INTERES,
-                valorCuota: row.DDO_MONTO,
-                saldoPendiente: row.TOTAL
-            }));
+            // Mapeamos los resultados usando tus helpers existentes
+            return result.rows.map((row: any) => {
+                return {
+                    numeroCuota: row.NCUOTA,
+                    // Parseamos la fecha DD/MM/RRRR que viene de la consulta
+                    fechaVencimiento: parseOracleDate(row.DDO_FECHA_VEN) || '',
+                    
+                    // Según tu JSON, 'ABONOCAPITAL' trae el valor real del capital en la cuota
+                    capital: parseMoney(row.ABONOCAPITAL), 
+                    
+                    // Estos vienen como strings formateados ('   0.00'), parseMoney los limpia
+                    interes: parseMoney(row.DDO_INTERES), 
+                    valorCuota: parseMoney(row.DDO_PAGO), 
+                    
+                    // Este es el cálculo especial de saldo que hace tu nueva query
+                    saldoPendiente: parseMoney(row.SALDO_CAPITAL)
+                };
+            });
 
         } catch (error) {
             console.error('Error en getTablaAmortizacion:', error);
@@ -610,5 +687,5 @@ export class CarteraRepository {
         } finally {
             if (connection) await connection.close();
         }
-    }
+    }       
 }

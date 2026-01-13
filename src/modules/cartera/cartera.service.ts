@@ -1,4 +1,4 @@
-import { CarteraRepository } from './cartera.repository';
+import { CarteraRepository } from './cartera.repository'; // Ajusta la ruta si es necesario
 import { KpiCartera, ClienteDeudaSummary, DetalleDocumento, NotaGestion, ClienteBusqueda, HistorialVenta, HistorialPago, CreditoResumen, CuotaAmortizacion } from './cartera.interface';
 
 export class CarteraService {
@@ -55,7 +55,8 @@ export class CarteraService {
         return await this.repository.getCreditosByClienteId(clienteId);
     }
 
-    async obtenerAmortizacion(creditoId: string): Promise<CuotaAmortizacion[]> {
-        return await this.repository.getTablaAmortizacion(creditoId);
+    // ACTUALIZADO: Recibe ambos parámetros
+    async obtenerAmortizacion(clienteId: number, creditoId: string): Promise<CuotaAmortizacion[]> {
+        return await this.repository.getTablaAmortizacion(clienteId, creditoId);
     }
 }

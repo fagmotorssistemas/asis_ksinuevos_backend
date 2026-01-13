@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { CarteraService } from './cartera.service';
+import { CarteraService } from './cartera.service'; // Ajusta la ruta si es necesario
 
 const carteraService = new CarteraService();
 
@@ -14,7 +14,7 @@ export const getKpiResumen = async (req: Request, res: Response) => {
 
 export const getTopDeudores = async (req: Request, res: Response) => {
     try {
-        const limit = req.query.limit ? parseInt(req.query.limit as string) : 10;
+        const limit = req.query.limit ? parseInt(req.query.limit as string) : 300;
         const deudores = await carteraService.obtenerTopDeudores(limit);
         res.json({ success: true, count: deudores.length, data: deudores });
     } catch (error: any) {
@@ -24,7 +24,7 @@ export const getTopDeudores = async (req: Request, res: Response) => {
 
 export const getTodosDeudores = async (req: Request, res: Response) => {
     try {
-        const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
+        const limit = req.query.limit ? parseInt(req.query.limit as string) : 300;
         const deudores = await carteraService.obtenerTodosDeudores(limit);
         res.json({ success: true, count: deudores.length, data: deudores });
     } catch (error: any) {
@@ -68,7 +68,6 @@ export const getClienteDetalle = async (req: Request, res: Response) => {
 //   NUEVOS CONTROLADORES DE AMORTIZACIÓN
 // ==========================================
 
-// 1. Obtener ID del cliente dado su RUC/Cédula
 export const getClientePorCedula = async (req: Request, res: Response) => {
     try {
         const cedula = req.params.cedula;
@@ -85,7 +84,6 @@ export const getClientePorCedula = async (req: Request, res: Response) => {
     }
 };
 
-// 2. Listar créditos de un cliente (por ID de cliente)
 export const getCreditosCliente = async (req: Request, res: Response) => {
     try {
         const clienteId = parseInt(req.params.id);
@@ -96,11 +94,18 @@ export const getCreditosCliente = async (req: Request, res: Response) => {
     }
 };
 
-// 3. Ver tabla de amortización (por ID de crédito largo)
+// 3. Ver tabla de amortización (ACTUALIZADO)
 export const getAmortizacionCredito = async (req: Request, res: Response) => {
     try {
-        const creditoId = req.params.idCredito; // Viene como string
-        const tabla = await carteraService.obtenerAmortizacion(creditoId);
+        const clienteId = parseInt(req.params.clienteId);
+        const creditoId = req.params.creditoId; // Viene como string (el ID gigante)
+
+        if (isNaN(clienteId) || !creditoId) {
+            res.status(400).json({ success: false, message: "Faltan parámetros (clienteId o creditoId)" });
+            return;
+        }
+
+        const tabla = await carteraService.obtenerAmortizacion(clienteId, creditoId);
         res.json({ success: true, count: tabla.length, data: tabla });
     } catch (error: any) {
         res.status(500).json({ success: false, message: error.message });
