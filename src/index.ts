@@ -1,10 +1,13 @@
-import 'dotenv/config'; // Asegura cargar variables de entorno primero
-import 'express-async-errors'; // <--- AGREGADO: Manejo de errores asíncronos para Express 4
+import 'dotenv/config'; 
+import 'express-async-errors'; 
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { initializePool, closePool } from './config/oracle';
 import { testDatabaseConnection, listViews } from './modules/test/test.controller';
+
+// --- IMPORTACIÓN DE MÓDULOS ---
 import carteraRoutes from './modules/cartera/cartera.routes'; 
+import tesoreriaRoutes from './modules/tesoreria/tesoreria.routes'; // <--- (1) AGREGADO
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,7 +15,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Ruta de ping
+// Ruta de ping (Health Check)
 app.get('/ping', (req: Request, res: Response) => {
     res.json({
         status: 'online',
@@ -25,8 +28,9 @@ app.get('/ping', (req: Request, res: Response) => {
 app.get('/api/test-db', testDatabaseConnection);
 app.get('/api/list-views', listViews); 
 
-// Rutas Principales
+// --- REGISTRO DE RUTAS PRINCIPALES ---
 app.use('/api/cartera', carteraRoutes);
+app.use('/api/tesoreria', tesoreriaRoutes); // <--- (2) AGREGADO: Aquí habilitamos la ruta
 
 const startServer = async () => {
     try {
@@ -36,12 +40,10 @@ const startServer = async () => {
         const server = app.listen(PORT, () => {
             console.log(`🚀 Servidor corriendo con éxito en http://localhost:${PORT}`);
             console.log('---------------------------------------------------------');
-            console.log(`📊 KPI Dashboard:   http://localhost:${PORT}/api/cartera/kpi`);
-            console.log(`🏆 Top Deudores:    http://localhost:${PORT}/api/cartera/top-deudores`);
-            console.log(`🔎 Buscador Demo:   http://localhost:${PORT}/api/cartera/buscar?q=SANCHEZ`);
-            console.log(`👤 Detalle Cliente: http://localhost:${PORT}/api/cartera/clientes/72`);
+            console.log(`📊 Cartera KPI:      http://localhost:${PORT}/api/cartera/kpi`);
+            // Mensaje de confirmación para Tesorería
+            console.log(`💰 Tesorería Dash:   http://localhost:${PORT}/api/tesoreria/dashboard`); 
             console.log('---------------------------------------------------------');
-            console.log(`🛠  Diagnóstico DB:  http://localhost:${PORT}/api/test-db`);
         });
 
         // Manejo de cierre graceful del servidor
