@@ -7,7 +7,9 @@ import { testDatabaseConnection, listViews } from './modules/test/test.controlle
 
 // --- IMPORTACIÓN DE MÓDULOS ---
 import carteraRoutes from './modules/cartera/cartera.routes'; 
-import tesoreriaRoutes from './modules/tesoreria/tesoreria.routes'; // <--- (1) AGREGADO
+import tesoreriaRoutes from './modules/tesoreria/tesoreria.routes';
+import empleadosRoutes from './modules/employee/empleados.routes';
+import ventasRoutes from './modules/ventas/ventas.routes'; // <--- (1) NUEVO IMPORT
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,7 +17,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Ruta de ping (Health Check)
+// Ruta de ping
 app.get('/ping', (req: Request, res: Response) => {
     res.json({
         status: 'online',
@@ -24,13 +26,14 @@ app.get('/ping', (req: Request, res: Response) => {
     });
 });
 
-// Rutas de prueba con Oracle
 app.get('/api/test-db', testDatabaseConnection);
 app.get('/api/list-views', listViews); 
 
 // --- REGISTRO DE RUTAS PRINCIPALES ---
 app.use('/api/cartera', carteraRoutes);
-app.use('/api/tesoreria', tesoreriaRoutes); // <--- (2) AGREGADO: Aquí habilitamos la ruta
+app.use('/api/tesoreria', tesoreriaRoutes);
+app.use('/api/empleados', empleadosRoutes);
+app.use('/api/ventas', ventasRoutes); // <--- (2) NUEVA RUTA BASE
 
 const startServer = async () => {
     try {
@@ -41,18 +44,17 @@ const startServer = async () => {
             console.log(`🚀 Servidor corriendo con éxito en http://localhost:${PORT}`);
             console.log('---------------------------------------------------------');
             console.log(`📊 Cartera KPI:      http://localhost:${PORT}/api/cartera/kpi`);
-            // Mensaje de confirmación para Tesorería
             console.log(`💰 Tesorería Dash:   http://localhost:${PORT}/api/tesoreria/dashboard`); 
+            console.log(`👥 Empleados Dash:   http://localhost:${PORT}/api/empleados/dashboard`);
+            console.log(`🚗 Ventas Dash:      http://localhost:${PORT}/api/ventas/dashboard`); // <--- (3) NUEVO LOG
             console.log('---------------------------------------------------------');
         });
 
-        // Manejo de cierre graceful del servidor
+        // Manejo de cierre graceful
         const gracefulShutdown = async (signal: string) => {
             console.log(`\n⚠️  Señal ${signal} recibida. Cerrando servidor...`);
-            
             server.close(async () => {
                 console.log('🔒 Servidor HTTP cerrado');
-                
                 try {
                     await closePool();
                     console.log('👋 Servidor cerrado limpiamente');
@@ -62,25 +64,20 @@ const startServer = async () => {
                     process.exit(1);
                 }
             });
-
-            // Si después de 10 segundos no se cerró, forzar cierre
             setTimeout(() => {
                 console.error('⏰ Timeout: Forzando cierre del servidor');
                 process.exit(1);
             }, 10000);
         };
 
-        // Escuchar señales de terminación
         process.on('SIGINT', () => gracefulShutdown('SIGINT'));
         process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
         process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2'));
 
-        // Manejo de errores no capturados
         process.on('uncaughtException', (error) => {
             console.error('❌ Excepción no capturada:', error);
             gracefulShutdown('uncaughtException');
         });
-
         process.on('unhandledRejection', (reason, promise) => {
             console.error('❌ Promise rechazada no manejada:', reason);
             gracefulShutdown('unhandledRejection');
