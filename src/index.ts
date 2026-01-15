@@ -9,7 +9,8 @@ import { testDatabaseConnection, listViews } from './modules/test/test.controlle
 import carteraRoutes from './modules/cartera/cartera.routes'; 
 import tesoreriaRoutes from './modules/tesoreria/tesoreria.routes';
 import empleadosRoutes from './modules/employee/empleados.routes';
-import ventasRoutes from './modules/ventas/ventas.routes'; // <--- (1) NUEVO IMPORT
+import ventasRoutes from './modules/ventas/ventas.routes';
+import finanzasRoutes from './modules/finanzas/finanzas.routes'; // <--- (1) NUEVO IMPORT DE FINANZAS
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -31,9 +32,10 @@ app.get('/api/list-views', listViews);
 
 // --- REGISTRO DE RUTAS PRINCIPALES ---
 app.use('/api/cartera', carteraRoutes);
-app.use('/api/tesoreria', tesoreriaRoutes);
+app.use('/api/tesoreria', tesoreriaRoutes); // Ojo: Si finanzas reemplaza a tesoreria, podrías comentar esta
 app.use('/api/empleados', empleadosRoutes);
-app.use('/api/ventas', ventasRoutes); // <--- (2) NUEVA RUTA BASE
+app.use('/api/ventas', ventasRoutes);
+app.use('/api/finanzas', finanzasRoutes); // <--- (2) NUEVA RUTA REGISTRADA
 
 const startServer = async () => {
     try {
@@ -46,7 +48,8 @@ const startServer = async () => {
             console.log(`📊 Cartera KPI:      http://localhost:${PORT}/api/cartera/kpi`);
             console.log(`💰 Tesorería Dash:   http://localhost:${PORT}/api/tesoreria/dashboard`); 
             console.log(`👥 Empleados Dash:   http://localhost:${PORT}/api/empleados/dashboard`);
-            console.log(`🚗 Ventas Dash:      http://localhost:${PORT}/api/ventas/dashboard`); // <--- (3) NUEVO LOG
+            console.log(`🚗 Ventas Dash:      http://localhost:${PORT}/api/ventas/dashboard`);
+            console.log(`📈 Finanzas Dash:    http://localhost:${PORT}/api/finanzas/dashboard`); // <--- (3) LOG PARA PRUEBAS
             console.log('---------------------------------------------------------');
         });
 
