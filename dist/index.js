@@ -3,13 +3,19 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-require("dotenv/config"); // Asegura cargar variables de entorno primero
-require("express-async-errors"); // <--- AGREGADO: Manejo de errores asíncronos para Express 4
+require("dotenv/config");
+require("express-async-errors");
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const oracle_1 = require("./config/oracle");
 const test_controller_1 = require("./modules/test/test.controller");
+// --- IMPORTACIÓN DE MÓDULOS ---
 const cartera_routes_1 = __importDefault(require("./modules/cartera/cartera.routes"));
+const tesoreria_routes_1 = __importDefault(require("./modules/tesoreria/tesoreria.routes"));
+const empleados_routes_1 = __importDefault(require("./modules/employee/empleados.routes"));
+const ventas_routes_1 = __importDefault(require("./modules/ventas/ventas.routes"));
+const finanzas_routes_1 = __importDefault(require("./modules/finanzas/finanzas.routes"));
+const cobros_routes_1 = __importDefault(require("./modules/cobros/cobros.routes"));
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
 app.use((0, cors_1.default)());
@@ -22,11 +28,15 @@ app.get('/ping', (req, res) => {
         timestamp: new Date().toISOString()
     });
 });
-// Rutas de prueba con Oracle
 app.get('/api/test-db', test_controller_1.testDatabaseConnection);
 app.get('/api/list-views', test_controller_1.listViews);
-// Rutas Principales
+// --- REGISTRO DE RUTAS PRINCIPALES ---
 app.use('/api/cartera', cartera_routes_1.default);
+app.use('/api/tesoreria', tesoreria_routes_1.default); // Ojo: Si finanzas reemplaza a tesoreria, podrías comentar esta
+app.use('/api/empleados', empleados_routes_1.default);
+app.use('/api/ventas', ventas_routes_1.default);
+app.use('/api/finanzas', finanzas_routes_1.default);
+app.use('/api/cobros', cobros_routes_1.default); // <--- (2) REGISTRAR RUTA
 const startServer = async () => {
     try {
         console.log('⏳ Iniciando servidor ASIS-Backend...');
@@ -34,14 +44,15 @@ const startServer = async () => {
         const server = app.listen(PORT, () => {
             console.log(`🚀 Servidor corriendo con éxito en http://localhost:${PORT}`);
             console.log('---------------------------------------------------------');
-            console.log(`📊 KPI Dashboard:   http://localhost:${PORT}/api/cartera/kpi`);
-            console.log(`🏆 Top Deudores:    http://localhost:${PORT}/api/cartera/top-deudores`);
-            console.log(`🔎 Buscador Demo:   http://localhost:${PORT}/api/cartera/buscar?q=SANCHEZ`);
-            console.log(`👤 Detalle Cliente: http://localhost:${PORT}/api/cartera/clientes/72`);
+            console.log(`📊 Cartera KPI:      http://localhost:${PORT}/api/cartera/kpi`);
+            console.log(`💰 Tesorería Dash:   http://localhost:${PORT}/api/tesoreria/dashboard`);
+            console.log(`👥 Empleados Dash:   http://localhost:${PORT}/api/empleados/dashboard`);
+            console.log(`🚗 Ventas Dash:      http://localhost:${PORT}/api/ventas/dashboard`);
+            console.log(`📈 Finanzas Dash:    http://localhost:${PORT}/api/finanzas/dashboard`);
+            console.log(`📋 Cobros Dash:      http://localhost:${PORT}/api/cobros/dashboard`);
             console.log('---------------------------------------------------------');
-            console.log(`🛠  Diagnóstico DB:  http://localhost:${PORT}/api/test-db`);
         });
-        // Manejo de cierre graceful del servidor
+        // Manejo de cierre graceful
         const gracefulShutdown = async (signal) => {
             console.log(`\n⚠️  Señal ${signal} recibida. Cerrando servidor...`);
             server.close(async () => {
@@ -56,17 +67,14 @@ const startServer = async () => {
                     process.exit(1);
                 }
             });
-            // Si después de 10 segundos no se cerró, forzar cierre
             setTimeout(() => {
                 console.error('⏰ Timeout: Forzando cierre del servidor');
                 process.exit(1);
             }, 10000);
         };
-        // Escuchar señales de terminación
         process.on('SIGINT', () => gracefulShutdown('SIGINT'));
         process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
         process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2'));
-        // Manejo de errores no capturados
         process.on('uncaughtException', (error) => {
             console.error('❌ Excepción no capturada:', error);
             gracefulShutdown('uncaughtException');
