@@ -12,6 +12,8 @@ import empleadosRoutes from './modules/employee/empleados.routes';
 import ventasRoutes from './modules/ventas/ventas.routes';
 import finanzasRoutes from './modules/finanzas/finanzas.routes'; 
 import cobrosRoutes from './modules/cobros/cobros.routes'; 
+import contratosRoutes from './modules/contratos/contratos.routes';
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,7 +39,8 @@ app.use('/api/tesoreria', tesoreriaRoutes); // Ojo: Si finanzas reemplaza a teso
 app.use('/api/empleados', empleadosRoutes);
 app.use('/api/ventas', ventasRoutes);
 app.use('/api/finanzas', finanzasRoutes); 
-app.use('/api/cobros', cobrosRoutes); // <--- (2) REGISTRAR RUTA
+app.use('/api/cobros', cobrosRoutes); 
+app.use('/api/contratos', contratosRoutes);
 
 
 const startServer = async () => {
@@ -54,6 +57,10 @@ const startServer = async () => {
             console.log(`🚗 Ventas Dash:      http://localhost:${PORT}/api/ventas/dashboard`);
             console.log(`📈 Finanzas Dash:    http://localhost:${PORT}/api/finanzas/dashboard`);
             console.log(`📋 Cobros Dash:      http://localhost:${PORT}/api/cobros/dashboard`);
+            console.log(`📑 Contratos Data:   http://localhost:${PORT}/api/contratos/data-load`);
+            console.log(`🧾 Amortización:     http://localhost:${PORT}/api/contratos/amortizacion/:id`);
+
+            
             
             console.log('---------------------------------------------------------');
         });
