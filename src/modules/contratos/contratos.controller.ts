@@ -3,31 +3,54 @@ import { ContratosService } from './contratos.service';
 
 const contratosService = new ContratosService();
 
-export const getAllDataContratos = async (req: Request, res: Response) => {
+// GET /api/contratos/list
+export const getListaContratos = async (req: Request, res: Response) => {
     try {
-        const data = await contratosService.obtenerListadosCompletos();
+        const data = await contratosService.obtenerListaContratos();
         res.json({ 
             success: true, 
             data: data 
         });
     } catch (error: any) {
-        console.error('Error en getAllDataContratos:', error);
+        console.error('Error en getListaContratos:', error);
         res.status(500).json({ 
             success: false, 
-            message: 'Error cargando datos de contratos',
+            message: 'Error obteniendo lista de contratos',
             error: error.message 
         });
     }
 };
 
+// GET /api/contratos/detalle/:id
+export const getDetalleContrato = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const data = await contratosService.obtenerDetalleContrato(id);
+        
+        if (!data) {
+            res.status(404).json({ success: false, message: 'Contrato no encontrado' });
+            return;
+        }
+
+        res.json({ 
+            success: true, 
+            data: data 
+        });
+    } catch (error: any) {
+        console.error('Error en getDetalleContrato:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Error obteniendo detalle del contrato',
+            error: error.message 
+        });
+    }
+};
+
+// GET /api/contratos/amortizacion/:id
 export const getAmortizacion = async (req: Request, res: Response) => {
     try {
-        // ID viene en la URL como string gigante
         const { id } = req.params; 
-        
-        // Ya NO lo convertimos a Number(id), lo pasamos tal cual
         const data = await contratosService.obtenerAmortizacion(id); 
-        
         res.json({ 
             success: true, 
             data: data 

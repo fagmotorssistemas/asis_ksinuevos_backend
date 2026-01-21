@@ -8,12 +8,11 @@ import { testDatabaseConnection, listViews } from './modules/test/test.controlle
 // --- IMPORTACIÓN DE MÓDULOS ---
 import carteraRoutes from './modules/cartera/cartera.routes'; 
 import tesoreriaRoutes from './modules/tesoreria/tesoreria.routes';
-import empleadosRoutes from './modules/employee/empleados.routes';
+import empleadosRoutes from './modules/employee/empleados.routes'; // Ajusta la ruta si tu carpeta se llama 'empleados' o 'employee'
 import ventasRoutes from './modules/ventas/ventas.routes';
 import finanzasRoutes from './modules/finanzas/finanzas.routes'; 
 import cobrosRoutes from './modules/cobros/cobros.routes'; 
 import contratosRoutes from './modules/contratos/contratos.routes';
-
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,7 +20,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Ruta de ping
+// Ruta de ping (Health Check)
 app.get('/ping', (req: Request, res: Response) => {
     res.json({
         status: 'online',
@@ -30,18 +29,18 @@ app.get('/ping', (req: Request, res: Response) => {
     });
 });
 
+// Rutas de utilidad DB
 app.get('/api/test-db', testDatabaseConnection);
 app.get('/api/list-views', listViews); 
 
 // --- REGISTRO DE RUTAS PRINCIPALES ---
-app.use('/api/cartera', carteraRoutes);
-app.use('/api/tesoreria', tesoreriaRoutes); // Ojo: Si finanzas reemplaza a tesoreria, podrías comentar esta
-app.use('/api/empleados', empleadosRoutes);
-app.use('/api/ventas', ventasRoutes);
-app.use('/api/finanzas', finanzasRoutes); 
-app.use('/api/cobros', cobrosRoutes); 
-app.use('/api/contratos', contratosRoutes);
-
+app.use('/api/cartera', carteraRoutes);     // Módulo original (si aún se usa)
+app.use('/api/tesoreria', tesoreriaRoutes); // Bancos y saldos
+app.use('/api/empleados', empleadosRoutes); // RRHH
+app.use('/api/ventas', ventasRoutes);       // Vehículos vendidos
+app.use('/api/finanzas', finanzasRoutes);   // Balance contable
+app.use('/api/cobros', cobrosRoutes);       // Recaudación (Vista ksi_cobros_v)
+app.use('/api/contratos', contratosRoutes); // Contratos y Amortización
 
 const startServer = async () => {
     try {
@@ -57,19 +56,20 @@ const startServer = async () => {
             console.log(`🚗 Ventas Dash:      http://localhost:${PORT}/api/ventas/dashboard`);
             console.log(`📈 Finanzas Dash:    http://localhost:${PORT}/api/finanzas/dashboard`);
             console.log(`📋 Cobros Dash:      http://localhost:${PORT}/api/cobros/dashboard`);
-            console.log(`📑 Contratos Data:   http://localhost:${PORT}/api/contratos/data-load`);
-            console.log(`🧾 Amortización:     http://localhost:${PORT}/api/contratos/amortizacion/:id`);
-
-            
-            
+            console.log('--- Módulo Contratos ---');
+            console.log(`📑 Lista General:    http://localhost:${PORT}/api/contratos/list`); 
+            console.log(`🔍 Detalle (Ej):     http://localhost:${PORT}/api/contratos/detalle/100000000000000000000000883`); // ID de prueba real
+            console.log(`🧾 Amortiz (Ej):     http://localhost:${PORT}/api/contratos/amortizacion/100000000000000000000000883`);
             console.log('---------------------------------------------------------');
         });
 
         // Manejo de cierre graceful
         const gracefulShutdown = async (signal: string) => {
             console.log(`\n⚠️  Señal ${signal} recibida. Cerrando servidor...`);
+            
             server.close(async () => {
                 console.log('🔒 Servidor HTTP cerrado');
+                
                 try {
                     await closePool();
                     console.log('👋 Servidor cerrado limpiamente');
@@ -79,6 +79,8 @@ const startServer = async () => {
                     process.exit(1);
                 }
             });
+
+            // Timeout de seguridad
             setTimeout(() => {
                 console.error('⏰ Timeout: Forzando cierre del servidor');
                 process.exit(1);
@@ -93,6 +95,7 @@ const startServer = async () => {
             console.error('❌ Excepción no capturada:', error);
             gracefulShutdown('uncaughtException');
         });
+
         process.on('unhandledRejection', (reason, promise) => {
             console.error('❌ Promise rechazada no manejada:', reason);
             gracefulShutdown('unhandledRejection');

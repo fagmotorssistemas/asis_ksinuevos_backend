@@ -7,19 +7,18 @@ export class ContratosService {
         this.repository = new ContratosRepository();
     }
 
-    async obtenerListadosCompletos() {
-        const [resumen, detalles] = await Promise.all([
-            this.repository.getResumenContratos(),
-            this.repository.getAllDetallesContratos()
-        ]);
-
-        return {
-            resumenContratos: resumen,
-            detallesContratos: detalles
-        };
+    // 1. Obtener solo la lista básica (Rápido)
+    async obtenerListaContratos() {
+        return await this.repository.getResumenContratos();
     }
 
-    // Ahora recibe string
+    // 2. Obtener detalle de UN contrato específico (Bajo demanda)
+    async obtenerDetalleContrato(ccoCodigo: string) {
+        if (!ccoCodigo) throw new Error('Se requiere CCO_CODIGO para obtener el detalle');
+        return await this.repository.getDetalleContratoPorId(ccoCodigo);
+    }
+
+    // 3. Obtener Amortización
     async obtenerAmortizacion(ccoCodigo: string) {
         if (!ccoCodigo) throw new Error('Se requiere CCO_CODIGO para calcular la amortización');
         return await this.repository.getAmortizacionPorContrato(ccoCodigo);

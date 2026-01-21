@@ -6,13 +6,12 @@ const CODIGO_EMPRESA = 162;
 
 export class ContratosRepository {
 
-    // CONSULTA 2: Listado General
+    // CONSULTA 1: Listado General (Para llenar la tabla inicial)
     async getResumenContratos(): Promise<ContratoResumen[]> {
         let connection;
         try {
             connection = await getConnection();
             
-            // TRUCO: TO_CHAR para evitar notación científica en JS
             const sql = `
                 SELECT 
                     NOTA_VENTA_CONTRATO,
@@ -36,7 +35,7 @@ export class ContratosRepository {
                 fechaVenta: row.FECHA_VENTA,
                 clienteId: row.CLI_ID,
                 clienteNombre: row.CLIENTE,
-                ccoCodigo: row.CCO_CODIGO_STR, // Usamos el valor convertido a string
+                ccoCodigo: row.CCO_CODIGO_STR,
                 ccoEmpresa: row.CCO_EMPRESA
             }));
         } catch (error) {
@@ -47,13 +46,13 @@ export class ContratosRepository {
         }
     }
 
-    // CONSULTA 1: Detalles Completos
-    async getAllDetallesContratos(): Promise<ContratoDetalle[]> {
+    // CONSULTA 2: Detalle de UN SOLO Contrato (Nueva Lógica)
+    async getDetalleContratoPorId(ccoCodigo: string): Promise<ContratoDetalle | null> {
         let connection;
         try {
             connection = await getConnection();
             
-            // Aquí seleccionamos explícitamente para aplicar TO_CHAR al ID
+            // AHORA FILTRAMOS POR ID ESPECÍFICO
             const sql = `
                 SELECT 
                     NOTA_VENTA, FECHA_VENTA, CLIENTE, SIS_NOMBRE, CCO_FECHA, 
@@ -63,15 +62,21 @@ export class ContratosRepository {
                     COLOR, CFAC_OBSERVACIONES, AGENTE, DFAC_PRECIO, GASTOS_ADM,
                     TO_CHAR(CCO_CODIGO) as CCO_CODIGO_STR
                 FROM KSI_CONTRATOS_V
+                WHERE CCO_CODIGO = :ccoCodigo -- Filtro obligatorio
+                  AND ROWNUM = 1              -- Seguridad para traer solo 1
             `;
             
             const result: any = await connection.execute(
                 sql, 
-                [], 
+                [ccoCodigo], // Pasamos el string, Oracle lo maneja
                 { outFormat: oracledb.OUT_FORMAT_OBJECT }
             );
 
-            return result.rows.map((row: any) => ({
+            if (result.rows.length === 0) return null;
+
+            const row = result.rows[0];
+
+            return {
                 notaVenta: row.NOTA_VENTA,
                 fechaVenta: row.FECHA_VENTA,
                 cliente: row.CLIENTE,
@@ -99,25 +104,22 @@ export class ContratosRepository {
                 vendedor: row.AGENTE,
                 precioVehiculo: row.DFAC_PRECIO,
                 gastosAdministrativos: row.GASTOS_ADM,
-                ccoCodigo: row.CCO_CODIGO_STR // ID como String
-            }));
+                ccoCodigo: row.CCO_CODIGO_STR
+            };
         } catch (error) {
-            console.error('Error en getAllDetallesContratos:', error);
+            console.error(`Error en getDetalleContratoPorId ID ${ccoCodigo}:`, error);
             throw error;
         } finally {
             if (connection) await connection.close();
         }
     }
 
-    // CONSULTA 3: Amortización (Recibe string, no number)
+    // CONSULTA 3: Amortización (Se mantiene igual)
     async getAmortizacionPorContrato(ccoCodigo: string): Promise<CuotaAmortizacion[]> {
         let connection;
         try {
             connection = await getConnection();
             
-            // IMPORTANTE: En el SQL comparamos el parámetro (string) contra la columna.
-            // Oracle hace la conversión implícita o podemos usar TO_CHAR en la columna también si hiciera falta,
-            // pero usualmente pasar el string '1000...' funciona bien contra un campo NUMBER.
             const sql = `
                 SELECT 
                      ddo_cco_comproba,
@@ -151,7 +153,6 @@ export class ContratosRepository {
 
             const result: any = await connection.execute(
                 sql, 
-                // Pasamos ccoCodigo como string, Oracle lo entenderá
                 [CODIGO_EMPRESA, ccoCodigo], 
                 { outFormat: oracledb.OUT_FORMAT_OBJECT }
             );

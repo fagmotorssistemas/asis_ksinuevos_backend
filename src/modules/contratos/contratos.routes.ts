@@ -1,12 +1,15 @@
 import { Router } from 'express';
-import { getAllDataContratos, getAmortizacion } from './contratos.controller';
+import { getListaContratos, getDetalleContrato, getAmortizacion } from './contratos.controller';
 
 const router = Router();
 
-// Endpoint masivo (Consulta 1 + Consulta 2)
-router.get('/data-load', getAllDataContratos);
+// 1. Obtener lista de clientes/contratos (Resumen)
+router.get('/list', getListaContratos);
 
-// Endpoint específico (Consulta 3)
+// 2. Obtener detalle completo de UN contrato
+router.get('/detalle/:id', getDetalleContrato);
+
+// 3. Obtener tabla de amortización
 router.get('/amortizacion/:id', getAmortizacion);
 
 export default router;
