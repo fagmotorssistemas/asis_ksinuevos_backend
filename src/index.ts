@@ -8,6 +8,7 @@ import { testDatabaseConnection, listViews } from './modules/test/test.controlle
 // --- IMPORTACIÓN DE MÓDULOS ---
 import carteraRoutes from './modules/cartera/cartera.routes'; 
 import tesoreriaRoutes from './modules/tesoreria/tesoreria.routes';
+import pagosRoutes from './modules/pagos/pagos.routes';
 import empleadosRoutes from './modules/employee/empleados.routes'; // Ajusta la ruta si tu carpeta se llama 'empleados' o 'employee'
 import ventasRoutes from './modules/ventas/ventas.routes';
 import finanzasRoutes from './modules/finanzas/finanzas.routes'; 
@@ -41,6 +42,8 @@ app.use('/api/ventas', ventasRoutes);       // Vehículos vendidos
 app.use('/api/finanzas', finanzasRoutes);   // Balance contable
 app.use('/api/cobros', cobrosRoutes);       // Recaudación (Vista ksi_cobros_v)
 app.use('/api/contratos', contratosRoutes); // Contratos y Amortización
+app.use('/api/pagos', pagosRoutes);
+// --- FIN REGISTRO DE RUTAS ---
 
 const startServer = async () => {
     try {
@@ -60,6 +63,7 @@ const startServer = async () => {
             console.log(`📑 Lista General:    http://localhost:${PORT}/api/contratos/list`); 
             console.log(`🔍 Detalle (Ej):     http://localhost:${PORT}/api/contratos/detalle/100000000000000000000000883`); // ID de prueba real
             console.log(`🧾 Amortiz (Ej):     http://localhost:${PORT}/api/contratos/amortizacion/100000000000000000000000883`);
+            console.log(`📊 Pagos Dash:       http://localhost:${PORT}/api/pagos/dashboard`);
             console.log('---------------------------------------------------------');
         });
 
