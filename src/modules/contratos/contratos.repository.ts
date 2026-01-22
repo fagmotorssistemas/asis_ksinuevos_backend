@@ -6,30 +6,21 @@ const CODIGO_EMPRESA = 162;
 
 export class ContratosRepository {
 
-    // CONSULTA 1: Listado General (Para llenar la tabla inicial)
+    // CONSULTA 1: Listado General
     async getResumenContratos(): Promise<ContratoResumen[]> {
         let connection;
         try {
             connection = await getConnection();
-            
             const sql = `
                 SELECT 
-                    NOTA_VENTA_CONTRATO,
-                    FECHA_VENTA,
-                    CLI_ID,
-                    CLIENTE,
-                    TO_CHAR(CCO_CODIGO) as CCO_CODIGO_STR, 
-                    CCO_EMPRESA
+                    NOTA_VENTA_CONTRATO, FECHA_VENTA, CLI_ID, CLIENTE,
+                    TO_CHAR(CCO_CODIGO) as CCO_CODIGO_STR, CCO_EMPRESA
                 FROM KSI_NOTAS_CONTRATO_V 
                 WHERE CCO_EMPRESA = :empresa
             `;
-            
             const result: any = await connection.execute(
-                sql, 
-                [CODIGO_EMPRESA], 
-                { outFormat: oracledb.OUT_FORMAT_OBJECT }
+                sql, [CODIGO_EMPRESA], { outFormat: oracledb.OUT_FORMAT_OBJECT }
             );
-
             return result.rows.map((row: any) => ({
                 notaVenta: row.NOTA_VENTA_CONTRATO,
                 fechaVenta: row.FECHA_VENTA,
@@ -46,13 +37,59 @@ export class ContratosRepository {
         }
     }
 
-    // CONSULTA 2: Detalle de UN SOLO Contrato (Nueva Lógica)
+    // --- HELPER: Buscar Apoderado ---
+    // Esta es la consulta específica que te pasó el DBA
+    private async buscarApoderado(connection: oracledb.Connection, dfacProducto: number): Promise<string> {
+        try {
+            const sql = `
+                SELECT c.cli_nombre || ' con C.I. ' || C.CLI_RUC_CEDULA as DATOS_APODERADO
+                FROM   DATA_USR.dfactura a,
+                       DATA_USR.ccomproba b, 
+                       DATA_USR.cliente c
+                WHERE  a.dfac_empresa = b.cco_empresa
+                AND    b.cco_empresa = :empresa
+                AND    a.dfac_cfac_comproba = b.cco_codigo
+                AND    a.dfac_producto = :productoId  -- Aquí usamos el ID que sacamos del contrato
+                AND    b.cco_tipodoc = 129            -- Tipo documento específico (Poder/Traspaso)
+                AND    b.cco_empresa = c.cli_empresa
+                AND    b.cco_codclipro = c.cli_codigo
+                AND    b.cco_fecha = ( 
+                        SELECT max(b2.cco_fecha)
+                        FROM   DATA_USR.dfactura a2,
+                               DATA_USR.ccomproba b2
+                        WHERE  a2.dfac_empresa = b2.cco_empresa
+                        AND    b2.cco_empresa = :empresa
+                        AND    a2.dfac_cfac_comproba = b2.cco_codigo
+                        AND    a2.dfac_producto = :productoId -- Mismo ID aquí
+                        AND    b2.cco_tipodoc = 129
+                        AND    b2.cco_estado = 2
+                )
+            `;
+
+            const result: any = await connection.execute(
+                sql,
+                [CODIGO_EMPRESA, dfacProducto],
+                { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            );
+
+            if (result.rows && result.rows.length > 0) {
+                return result.rows[0].DATOS_APODERADO;
+            }
+            return 'No registrado / Compra Directa'; // Valor por defecto si no hay apoderado
+
+        } catch (error) {
+            console.error('Error buscando apoderado:', error);
+            return 'Error al consultar';
+        }
+    }
+
+    // CONSULTA 2: Detalle Completo (Ahora incluye Apoderado)
     async getDetalleContratoPorId(ccoCodigo: string): Promise<ContratoDetalle | null> {
         let connection;
         try {
             connection = await getConnection();
             
-            // AHORA FILTRAMOS POR ID ESPECÍFICO
+            // 1. Obtenemos el contrato y el DFAC_PRODUCTO
             const sql = `
                 SELECT 
                     NOTA_VENTA, FECHA_VENTA, CLIENTE, SIS_NOMBRE, CCO_FECHA, 
@@ -60,22 +97,27 @@ export class ContratosRepository {
                     CFAC_DIRECCION, CFAC_TELEFONO, UBI_NOMBRE, NRO_CONTRATO, PAGO_COMPRA,
                     VEHICULO_USADO, MARCA, TIPO, ANIO, MODELO, PLACA, MOTOR, CHASIS,
                     COLOR, CFAC_OBSERVACIONES, AGENTE, DFAC_PRECIO, GASTOS_ADM,
+                    DFAC_PRODUCTO, -- IMPORTANTE: Traemos este campo para la 2da búsqueda
                     TO_CHAR(CCO_CODIGO) as CCO_CODIGO_STR
                 FROM KSI_CONTRATOS_V
-                WHERE CCO_CODIGO = :ccoCodigo -- Filtro obligatorio
-                  AND ROWNUM = 1              -- Seguridad para traer solo 1
+                WHERE CCO_CODIGO = :ccoCodigo
+                  AND ROWNUM = 1
             `;
             
             const result: any = await connection.execute(
-                sql, 
-                [ccoCodigo], // Pasamos el string, Oracle lo maneja
-                { outFormat: oracledb.OUT_FORMAT_OBJECT }
+                sql, [ccoCodigo], { outFormat: oracledb.OUT_FORMAT_OBJECT }
             );
 
             if (result.rows.length === 0) return null;
-
             const row = result.rows[0];
 
+            // 2. Usamos el DFAC_PRODUCTO para buscar al apoderado
+            let nombreApoderado = 'N/A';
+            if (row.DFAC_PRODUCTO) {
+                nombreApoderado = await this.buscarApoderado(connection, row.DFAC_PRODUCTO);
+            }
+
+            // 3. Retornamos todo junto
             return {
                 notaVenta: row.NOTA_VENTA,
                 fechaVenta: row.FECHA_VENTA,
@@ -104,7 +146,11 @@ export class ContratosRepository {
                 vendedor: row.AGENTE,
                 precioVehiculo: row.DFAC_PRECIO,
                 gastosAdministrativos: row.GASTOS_ADM,
-                ccoCodigo: row.CCO_CODIGO_STR
+                ccoCodigo: row.CCO_CODIGO_STR,
+                
+                // Nuevos campos
+                dfacProducto: row.DFAC_PRODUCTO,
+                apoderado: nombreApoderado
             };
         } catch (error) {
             console.error(`Error en getDetalleContratoPorId ID ${ccoCodigo}:`, error);
@@ -114,20 +160,14 @@ export class ContratosRepository {
         }
     }
 
-    // CONSULTA 3: Amortización (Se mantiene igual)
+    // CONSULTA 3: Amortización
     async getAmortizacionPorContrato(ccoCodigo: string): Promise<CuotaAmortizacion[]> {
         let connection;
         try {
             connection = await getConnection();
-            
             const sql = `
                 SELECT 
-                     ddo_cco_comproba,
-                     FEC_VENCE,
-                     NCUOTA,
-                     CAPITAL,      
-                     SSO_INTERES,  
-                     CUOTA,        
+                     ddo_cco_comproba, FEC_VENCE, NCUOTA, CAPITAL, SSO_INTERES, CUOTA,        
                      CAPITAL - ABONO_CAPITAL AS SALDO_CAPITAL
                 FROM (
                  SELECT a.ddo_cco_comproba, 
@@ -150,13 +190,9 @@ export class ContratosRepository {
                  AND a.ddo_empresa = c.cco_empresa
                ) ORDER BY NCUOTa
             `;
-
             const result: any = await connection.execute(
-                sql, 
-                [CODIGO_EMPRESA, ccoCodigo], 
-                { outFormat: oracledb.OUT_FORMAT_OBJECT }
+                sql, [CODIGO_EMPRESA, ccoCodigo], { outFormat: oracledb.OUT_FORMAT_OBJECT }
             );
-
             return result.rows.map((row: any) => ({
                 nroCuota: row.NCUOTA,
                 fechaVencimiento: row.FEC_VENCE,

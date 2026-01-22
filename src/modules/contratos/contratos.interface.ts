@@ -1,14 +1,12 @@
-// Basado en Consulta 2 (Resumen / Listado)
 export interface ContratoResumen {
     notaVenta: string;
     fechaVenta: string;
     clienteId: string;
     clienteNombre: string;
-    ccoCodigo: string;        // CAMBIO IMPORTANTE: Ahora es string
+    ccoCodigo: string;
     ccoEmpresa: number;
 }
 
-// Basado en Consulta 1 (Detalle Completo)
 export interface ContratoDetalle {
     notaVenta: string;
     fechaVenta: string;
@@ -37,10 +35,13 @@ export interface ContratoDetalle {
     vendedor: string;
     precioVehiculo: number;
     gastosAdministrativos: string;
-    ccoCodigo: string; // CAMBIO IMPORTANTE: Ahora es string
+    ccoCodigo: string;
+    
+    // --- NUEVOS CAMPOS ---
+    dfacProducto: number; // El ID del vehículo necesario para la búsqueda
+    apoderado: string;    // El resultado de la consulta del DBA (Nombre + CI)
 }
 
-// Basado en Consulta 3 (Tabla de Amortización)
 export interface CuotaAmortizacion {
     nroCuota: number;
     fechaVencimiento: string;
