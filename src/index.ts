@@ -9,7 +9,7 @@ import { testDatabaseConnection, listViews } from './modules/test/test.controlle
 import carteraRoutes from './modules/cartera/cartera.routes'; 
 import tesoreriaRoutes from './modules/tesoreria/tesoreria.routes';
 import pagosRoutes from './modules/pagos/pagos.routes';
-import empleadosRoutes from './modules/employee/empleados.routes'; // Ajusta la ruta si tu carpeta se llama 'empleados' o 'employee'
+import empleadosRoutes from './modules/employee/empleados.routes'; 
 import ventasRoutes from './modules/ventas/ventas.routes';
 import finanzasRoutes from './modules/finanzas/finanzas.routes'; 
 import cobrosRoutes from './modules/cobros/cobros.routes'; 
