@@ -14,6 +14,7 @@ import ventasRoutes from './modules/ventas/ventas.routes';
 import finanzasRoutes from './modules/finanzas/finanzas.routes'; 
 import cobrosRoutes from './modules/cobros/cobros.routes'; 
 import contratosRoutes from './modules/contratos/contratos.routes';
+import inventarioRoutes from './modules/inventario/inventario.routes';  
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -42,7 +43,8 @@ app.use('/api/ventas', ventasRoutes);       // Vehículos vendidos
 app.use('/api/finanzas', finanzasRoutes);   // Balance contable
 app.use('/api/cobros', cobrosRoutes);       // Recaudación (Vista ksi_cobros_v)
 app.use('/api/contratos', contratosRoutes); // Contratos y Amortización
-app.use('/api/pagos', pagosRoutes);
+app.use('/api/pagos', pagosRoutes);         // Pagos realizados
+app.use('/api/inventario', inventarioRoutes); // Inventario de vehículos
 // --- FIN REGISTRO DE RUTAS ---
 
 const startServer = async () => {
@@ -64,6 +66,7 @@ const startServer = async () => {
             console.log(`🔍 Detalle (Ej):     http://localhost:${PORT}/api/contratos/detalle/100000000000000000000000883`); // ID de prueba real
             console.log(`🧾 Amortiz (Ej):     http://localhost:${PORT}/api/contratos/amortizacion/100000000000000000000000883`);
             console.log(`📊 Pagos Dash:       http://localhost:${PORT}/api/pagos/dashboard`);
+            console.log(`📊 Inventario Dash:  http://localhost:${PORT}/api/inventario/dashboard`);
             console.log('---------------------------------------------------------');
         });
 
