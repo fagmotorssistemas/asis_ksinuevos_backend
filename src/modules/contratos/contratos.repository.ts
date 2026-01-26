@@ -38,7 +38,6 @@ export class ContratosRepository {
     }
 
     // --- HELPER: Buscar Apoderado ---
-    // Esta es la consulta específica que te pasó el DBA
     private async buscarApoderado(connection: oracledb.Connection, dfacProducto: number): Promise<string> {
         try {
             const sql = `
@@ -49,8 +48,8 @@ export class ContratosRepository {
                 WHERE  a.dfac_empresa = b.cco_empresa
                 AND    b.cco_empresa = :empresa
                 AND    a.dfac_cfac_comproba = b.cco_codigo
-                AND    a.dfac_producto = :productoId  -- Aquí usamos el ID que sacamos del contrato
-                AND    b.cco_tipodoc = 129            -- Tipo documento específico (Poder/Traspaso)
+                AND    a.dfac_producto = :productoId
+                AND    b.cco_tipodoc = 129
                 AND    b.cco_empresa = c.cli_empresa
                 AND    b.cco_codclipro = c.cli_codigo
                 AND    b.cco_fecha = ( 
@@ -60,7 +59,7 @@ export class ContratosRepository {
                         WHERE  a2.dfac_empresa = b2.cco_empresa
                         AND    b2.cco_empresa = :empresa
                         AND    a2.dfac_cfac_comproba = b2.cco_codigo
-                        AND    a2.dfac_producto = :productoId -- Mismo ID aquí
+                        AND    a2.dfac_producto = :productoId
                         AND    b2.cco_tipodoc = 129
                         AND    b2.cco_estado = 2
                 )
@@ -75,7 +74,7 @@ export class ContratosRepository {
             if (result.rows && result.rows.length > 0) {
                 return result.rows[0].DATOS_APODERADO;
             }
-            return 'No registrado / Compra Directa'; // Valor por defecto si no hay apoderado
+            return 'No registrado / Compra Directa';
 
         } catch (error) {
             console.error('Error buscando apoderado:', error);
@@ -83,21 +82,25 @@ export class ContratosRepository {
         }
     }
 
-    // CONSULTA 2: Detalle Completo (Ahora incluye Apoderado)
+    // CONSULTA 2: Detalle Completo (ACTUALIZADO CON TODOS LOS CAMPOS)
     async getDetalleContratoPorId(ccoCodigo: string): Promise<ContratoDetalle | null> {
         let connection;
         try {
             connection = await getConnection();
             
-            // 1. Obtenemos el contrato y el DFAC_PRODUCTO
+            // 1. Obtenemos TODOS los campos de la vista según el requerimiento
             const sql = `
                 SELECT 
-                    NOTA_VENTA, FECHA_VENTA, CLIENTE, SIS_NOMBRE, CCO_FECHA, 
-                    TOTAL_FINAL, TOT_TOTAL, TOTAL_LETRAS, CFAC_NOMBRE, CFAC_CED_RUC,
-                    CFAC_DIRECCION, CFAC_TELEFONO, UBI_NOMBRE, NRO_CONTRATO, PAGO_COMPRA,
-                    VEHICULO_USADO, MARCA, TIPO, ANIO, MODELO, PLACA, MOTOR, CHASIS,
-                    COLOR, CFAC_OBSERVACIONES, AGENTE, DFAC_PRECIO, GASTOS_ADM,
-                    DFAC_PRODUCTO, -- IMPORTANTE: Traemos este campo para la 2da búsqueda
+                    DATOS_VEHICULO, NOTA_VENTA, FECHA_VENTA, CLIENTE, SIS_NOMBRE, 
+                    CCO_FECHA, CCO_FECHA_DADO, CCO_FECHACR, CCO_FECHA_CI, CCO_FECHA1, 
+                    TOT_TOTAL, TOTAL_LETRAS, CFAC_NOMBRE, CFAC_CED_RUC, CFAC_DIRECCION, 
+                    CFAC_TELEFONO, UBI_NOMBRE, DFAC_PRODUCTO, CIUDAD_CLIENTE, NRO_CONTRATO, 
+                    PAGO_COMPRA, VEHICULO_USADO, MARCA, TIPO, ANIO, MODELO, PLACA, 
+                    MOTOR, CHASIS, ANIO_DE_FABRICACION, COLOR, SEGURO_RAS_DIS, 
+                    CFAC_OBSERVACIONES, AGENTE, DFAC_PRECIO, DFAC_PRECIO_LETRAS, 
+                    DFAC_PRECIO_MAS_LETRAS, PRECIO_GASTOS, PRECIO_GASTOS_LETRAS, 
+                    TOTAL_PAGARE_MAS_LETRAS, VEHICULO, TOT_SEGURO_TRANS, TOT_RASTREADOR, 
+                    GASTOS_ADM, TOTAL_FINAL,
                     TO_CHAR(CCO_CODIGO) as CCO_CODIGO_STR
                 FROM KSI_CONTRATOS_V
                 WHERE CCO_CODIGO = :ccoCodigo
@@ -117,14 +120,15 @@ export class ContratosRepository {
                 nombreApoderado = await this.buscarApoderado(connection, row.DFAC_PRODUCTO);
             }
 
-            // 3. Retornamos todo junto
+            // 3. Mapeo COMPLETO de todos los campos
             return {
+                // Campos existentes
                 notaVenta: row.NOTA_VENTA,
                 fechaVenta: row.FECHA_VENTA,
                 cliente: row.CLIENTE,
                 sistemaNombre: row.SIS_NOMBRE,
                 textoFecha: row.CCO_FECHA,
-                totalFinal: row.TOTAL_FINAL || row.TOT_TOTAL,
+                totalFinal: row.TOTAL_FINAL,
                 totalLetras: row.TOTAL_LETRAS,
                 facturaNombre: row.CFAC_NOMBRE,
                 facturaRuc: row.CFAC_CED_RUC,
@@ -147,10 +151,27 @@ export class ContratosRepository {
                 precioVehiculo: row.DFAC_PRECIO,
                 gastosAdministrativos: row.GASTOS_ADM,
                 ccoCodigo: row.CCO_CODIGO_STR,
-                
-                // Nuevos campos
                 dfacProducto: row.DFAC_PRODUCTO,
-                apoderado: nombreApoderado
+                apoderado: nombreApoderado,
+
+                // --- NUEVOS CAMPOS MAPEOS ---
+                datosVehiculo: row.DATOS_VEHICULO,
+                ccoFechaDado: row.CCO_FECHA_DADO,
+                ccoFechaCr: row.CCO_FECHACR,
+                ccoFechaCi: row.CCO_FECHA_CI,
+                ccoFecha1: row.CCO_FECHA1,
+                totTotal: row.TOT_TOTAL,
+                ciudadCliente: row.CIUDAD_CLIENTE,
+                anioDeFabricacion: row.ANIO_DE_FABRICACION,
+                seguroRasDis: row.SEGURO_RAS_DIS,
+                dfacPrecioLetras: row.DFAC_PRECIO_LETRAS,
+                dfacPrecioMasLetras: row.DFAC_PRECIO_MAS_LETRAS,
+                precioGastos: row.PRECIO_GASTOS,
+                precioGastosLetras: row.PRECIO_GASTOS_LETRAS,
+                totalPagareMasLetras: row.TOTAL_PAGARE_MAS_LETRAS,
+                vehiculo: row.VEHICULO,
+                totSeguroTrans: row.TOT_SEGURO_TRANS,
+                totRastreador: row.TOT_RASTREADOR
             };
         } catch (error) {
             console.error(`Error en getDetalleContratoPorId ID ${ccoCodigo}:`, error);
