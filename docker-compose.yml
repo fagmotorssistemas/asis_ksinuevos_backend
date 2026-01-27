@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    # Forzamos emulación amd64 para que funcione en cualquier Apple Silicon (M1, M2, M3, M4...)
+    platform: linux/amd64 
+    ports:
+      - "3000:3000" # Mapea puerto 3000 de tu PC al 3000 del contenedor
+    environment:
+      # --- CONFIGURACIÓN DE ORACLE ---
+      # Variables actualizadas según tu .env
+      - DB_USER=usr_web
+      - DB_PASSWORD=usr_web
+      - DB_CONNECTION_STRING=192.168.0.117:1521/DB11G
+      
+      # Esta variable le dice a tu código TypeScript dónde buscar el cliente dentro de Docker
+      - ORACLE_LIB_DIR=/opt/oracle/instantclient_19_19
+      
+      # Otras variables
+      - PORT=3000
+      - NODE_ENV=development
+    volumes:
+      # Esto permite "Hot Reload". Si cambias código en tu carpeta, se actualiza en Docker
+      - .:/app
+      - /app/node_modules # Truco para usar los node_modules internos del contenedor
+    restart: unless-stopped

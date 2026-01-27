@@ -6,11 +6,20 @@ dotenv.config();
 let clientInitialized = false;
 
 try {
+    // FIX: Usamos 'any' para evitar el error de TypeScript "InitOracleClientOptions"
+    // ya que algunas versiones de los tipos no exportan esta interfaz directamente.
     let clientOpts: any = {};
 
-    if (process.platform === 'win32') {
+    // 1. PRIORIDAD: Si estamos en Docker (Linux), usamos la variable de entorno
+    if (process.env.ORACLE_LIB_DIR) {
+        console.log(`🐳 Detectado entorno Docker/Linux. Usando libDir: ${process.env.ORACLE_LIB_DIR}`);
+        clientOpts = { libDir: process.env.ORACLE_LIB_DIR };
+    } 
+    // 2. FALLBACK: Tu configuración local de Windows
+    else if (process.platform === 'win32') {
         clientOpts = { libDir: 'C:\\oracle\\instantclient_19_29' };
     }
+    // 3. MAC LOCAL: Si no entra en los anteriores, intentará buscar la librería en rutas por defecto
 
     oracledb.initOracleClient(clientOpts);
     clientInitialized = true;
@@ -22,18 +31,18 @@ try {
         console.log('ℹ️ Oracle Client ya estaba inicializado');
     } else {
         console.error('❌ Error inicializando Oracle Client:', err);
-        throw err;
+        // No lanzamos error aquí para permitir depuración, pero fallará al conectar si no se inicializó
     }
 }
 
 if (!clientInitialized) {
-    throw new Error('❌ No se pudo inicializar Oracle Client.');
+    console.error('⚠️ ADVERTENCIA: Oracle Client no pudo inicializarse correctamente. Las conexiones a Oracle 11g fallarán.');
 }
 
 const dbConfig: oracledb.PoolAttributes = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    // AQUI ESTA EL ARREGLO: .trim() limpia los espacios invisibles
+    // .trim() es vital porque a veces los .env meten espacios al final
     connectString: process.env.DB_CONNECTION_STRING ? process.env.DB_CONNECTION_STRING.trim() : '',
     poolMin: 0,
     poolMax: 5,
@@ -47,19 +56,21 @@ let pool: oracledb.Pool | null = null;
 
 export const initializePool = async () => {
     try {
-        if (!clientInitialized) {
-            throw new Error('Oracle Client no está inicializado.');
+        // Validación extra antes de crear el pool
+        if (!process.env.DB_CONNECTION_STRING) {
+             throw new Error("NJS-125: DB_CONNECTION_STRING está vacío o indefinido en las variables de entorno.");
         }
 
         if (pool) {
             await pool.close(10);
         }
 
+        console.log(`🔌 Intentando conectar a: ${dbConfig.connectString}...`);
         pool = await oracledb.createPool(dbConfig);
         console.log('✅ Pool de conexiones a Oracle 11g inicializado');
 
     } catch (err: any) {
-        console.error('❌ Error al inicializar el pool:', err);
+        console.error('❌ Error CRÍTICO al inicializar el pool:', err);
         throw err;
     }
 };
@@ -100,7 +111,7 @@ export const getPoolStats = () => {
                 poolMin: dbConfig.poolMin,
                 poolMax: dbConfig.poolMax,
                 status: 'active',
-                mode: clientInitialized ? 'Thick' : 'Thin'
+                mode: clientInitialized ? 'Thick' : 'Thin (Probablemente fallará con 11g)'
             };
         } catch (err) {
             return { status: 'unknown' };
