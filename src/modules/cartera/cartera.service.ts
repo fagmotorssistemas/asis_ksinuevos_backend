@@ -13,7 +13,7 @@ export class CarteraService {
     }
 
     async obtenerTopDeudores(limite: number): Promise<ClienteDeudaSummary[]> {
-        const safeLimit = limite > 50 ? 50 : limite;
+        const safeLimit = limite > 500 ? 500 : limite;
         return await this.repository.getTopDeudores(safeLimit);
     }
 
