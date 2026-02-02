@@ -13,11 +13,12 @@ const test_controller_1 = require("./modules/test/test.controller");
 const cartera_routes_1 = __importDefault(require("./modules/cartera/cartera.routes"));
 const tesoreria_routes_1 = __importDefault(require("./modules/tesoreria/tesoreria.routes"));
 const pagos_routes_1 = __importDefault(require("./modules/pagos/pagos.routes"));
-const empleados_routes_1 = __importDefault(require("./modules/employee/empleados.routes")); // Ajusta la ruta si tu carpeta se llama 'empleados' o 'employee'
+const empleados_routes_1 = __importDefault(require("./modules/employee/empleados.routes"));
 const ventas_routes_1 = __importDefault(require("./modules/ventas/ventas.routes"));
 const finanzas_routes_1 = __importDefault(require("./modules/finanzas/finanzas.routes"));
 const cobros_routes_1 = __importDefault(require("./modules/cobros/cobros.routes"));
 const contratos_routes_1 = __importDefault(require("./modules/contratos/contratos.routes"));
+const inventario_routes_1 = __importDefault(require("./modules/inventario/inventario.routes"));
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
 app.use((0, cors_1.default)());
@@ -41,7 +42,8 @@ app.use('/api/ventas', ventas_routes_1.default); // Vehículos vendidos
 app.use('/api/finanzas', finanzas_routes_1.default); // Balance contable
 app.use('/api/cobros', cobros_routes_1.default); // Recaudación (Vista ksi_cobros_v)
 app.use('/api/contratos', contratos_routes_1.default); // Contratos y Amortización
-app.use('/api/pagos', pagos_routes_1.default);
+app.use('/api/pagos', pagos_routes_1.default); // Pagos realizados
+app.use('/api/inventario', inventario_routes_1.default); // Inventario de vehículos
 // --- FIN REGISTRO DE RUTAS ---
 const startServer = async () => {
     try {
@@ -61,6 +63,7 @@ const startServer = async () => {
             console.log(`🔍 Detalle (Ej):     http://localhost:${PORT}/api/contratos/detalle/100000000000000000000000883`); // ID de prueba real
             console.log(`🧾 Amortiz (Ej):     http://localhost:${PORT}/api/contratos/amortizacion/100000000000000000000000883`);
             console.log(`📊 Pagos Dash:       http://localhost:${PORT}/api/pagos/dashboard`);
+            console.log(`📊 Inventario Dash:  http://localhost:${PORT}/api/inventario/dashboard`);
             console.log('---------------------------------------------------------');
         });
         // Manejo de cierre graceful

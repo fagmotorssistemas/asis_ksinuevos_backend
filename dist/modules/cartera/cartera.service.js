@@ -11,7 +11,7 @@ class CarteraService {
         return await this.repository.getGlobalKPIs();
     }
     async obtenerTopDeudores(limite) {
-        const safeLimit = limite > 50 ? 50 : limite;
+        const safeLimit = limite > 500 ? 500 : limite;
         return await this.repository.getTopDeudores(safeLimit);
     }
     async obtenerTodosDeudores(limite) {

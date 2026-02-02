@@ -82,18 +82,19 @@ export class ContratosRepository {
         }
     }
 
-    // CONSULTA 2: Detalle Completo (ACTUALIZADO CON TODOS LOS CAMPOS)
+    // CONSULTA 2: Detalle Completo (CORREGIDA)
     async getDetalleContratoPorId(ccoCodigo: string): Promise<ContratoDetalle | null> {
         let connection;
         try {
             connection = await getConnection();
             
-            // 1. Obtenemos TODOS los campos de la vista según el requerimiento
+            // Se eliminó TOTAL_LETRAS por causar ORA-00904
+            // Se utiliza TOTAL_PAGARE_MAS_LETRAS o DFAC_PRECIO_LETRAS en su lugar según el JSON
             const sql = `
                 SELECT 
                     DATOS_VEHICULO, NOTA_VENTA, FECHA_VENTA, CLIENTE, SIS_NOMBRE, 
                     CCO_FECHA, CCO_FECHA_DADO, CCO_FECHACR, CCO_FECHA_CI, CCO_FECHA1, 
-                    TOT_TOTAL, TOTAL_LETRAS, CFAC_NOMBRE, CFAC_CED_RUC, CFAC_DIRECCION, 
+                    TOT_TOTAL, CFAC_NOMBRE, CFAC_CED_RUC, CFAC_DIRECCION, 
                     CFAC_TELEFONO, UBI_NOMBRE, DFAC_PRODUCTO, CIUDAD_CLIENTE, NRO_CONTRATO, 
                     PAGO_COMPRA, VEHICULO_USADO, MARCA, TIPO, ANIO, MODELO, PLACA, 
                     MOTOR, CHASIS, ANIO_DE_FABRICACION, COLOR, SEGURO_RAS_DIS, 
@@ -114,22 +115,20 @@ export class ContratosRepository {
             if (result.rows.length === 0) return null;
             const row = result.rows[0];
 
-            // 2. Usamos el DFAC_PRODUCTO para buscar al apoderado
             let nombreApoderado = 'N/A';
             if (row.DFAC_PRODUCTO) {
                 nombreApoderado = await this.buscarApoderado(connection, row.DFAC_PRODUCTO);
             }
 
-            // 3. Mapeo COMPLETO de todos los campos
             return {
-                // Campos existentes
                 notaVenta: row.NOTA_VENTA,
                 fechaVenta: row.FECHA_VENTA,
                 cliente: row.CLIENTE,
                 sistemaNombre: row.SIS_NOMBRE,
                 textoFecha: row.CCO_FECHA,
                 totalFinal: row.TOTAL_FINAL,
-                totalLetras: row.TOTAL_LETRAS,
+                // Mapeamos TOTAL_PAGARE_MAS_LETRAS a la propiedad totalLetras de la interfaz
+                totalLetras: row.TOTAL_PAGARE_MAS_LETRAS, 
                 facturaNombre: row.CFAC_NOMBRE,
                 facturaRuc: row.CFAC_CED_RUC,
                 facturaDireccion: row.CFAC_DIRECCION,
@@ -153,8 +152,6 @@ export class ContratosRepository {
                 ccoCodigo: row.CCO_CODIGO_STR,
                 dfacProducto: row.DFAC_PRODUCTO,
                 apoderado: nombreApoderado,
-
-                // --- NUEVOS CAMPOS MAPEOS ---
                 datosVehiculo: row.DATOS_VEHICULO,
                 ccoFechaDado: row.CCO_FECHA_DADO,
                 ccoFechaCr: row.CCO_FECHACR,
