@@ -1,17 +1,17 @@
 export interface VehiculoInventario {
-    // Identificadores del Sistema (Se traen pero se pueden ocultar en frontend)
+    // ... (Tu interfaz actual se mantiene igual)
     codEmpresa: number;
     empresa: string;
-    proCodigo: number;      // PRO_CODIGO
-    proId: string;          // PRO_ID (Código interno tipo KSI0004)
+    proCodigo: number;      
+    proId: string;          
 
     // Datos Principales
     marca: string;
     modelo: string;
-    anioModelo: string;     // ANIOO_MODELO
-    descripcion: string;    // DESCRIPCION_VEHICULO
+    anioModelo: string;     
+    descripcion: string;    
     placa: string;
-    tipo: string;           // TIPO (JEEP, AUTOMOVIL, ETC)
+    tipo: string;           
     color: string;
     
     // Ficha Técnica Detallada
@@ -24,16 +24,16 @@ export interface VehiculoInventario {
     nroLlantas: string;
     nroEjes: string;
     paisOrigen: string;
-    subclase: string;       // SUBCLASE
-    ram: string;            // RAM (Registro Automotor?)
+    subclase: string;       
+    ram: string;            
     version: string;
     
     // Datos de Matriculación y Legal
     anioMatricula: string;
     nombreMatricula: string;
     lugarMatricula: string;
-    placaCaracteristica: string; // PLACA_CARACTERISTICA
-    marcaCaracteristica: string; // MARCA_CARACTERISTICA
+    placaCaracteristica: string; 
+    marcaCaracteristica: string; 
 
     // Datos de Compra/Adquisición
     proveedor: string;
@@ -41,17 +41,43 @@ export interface VehiculoInventario {
     formaPago: string;
 
     // Estado del Inventario
-    stock: number;          // 0 = Baja/Vendido, >=1 = Activo/Disponible
+    stock: number;          
 }
 
-export interface ResumenInventario {
-    totalVehiculosRegistrados: number;
-    totalActivos: number;   // Stock > 0
-    totalBaja: number;      // Stock = 0
-    fechaActualizacion: string;
+// NUEVA INTERFAZ: Estructura de un movimiento del Kardex
+export interface MovimientoKardex {
+    fecha: Date;            // CCO_FECHA
+    tipoTransaccion: string;// TPD_NOMBRE (Ej: Nota de Entrega, Ingreso, Obligacion)
+    concepto: string;       // CCO_CONCEPTO (Ej: Preliquidacion, Compra bateria)
+    documento: string;      // DSP_COMPROBA (Ej: NENT-001-002)
+    clienteProveedor: string; // CLI_NOMBRE
+    
+    // Valores Financieros
+    esIngreso: boolean;     // Basado en DEBITO (1) o CREDITO (1)
+    cantidad: number;       // DMO_CANTIDAD
+    costoUnitario: number;  // DMO_COSTO
+    total: number;          // DMO_TOTAL
+    
+    usuario: string;        // CREA_USR
+}
+
+// NUEVA INTERFAZ: Respuesta del Detalle Completo
+export interface DetalleVehiculoResponse {
+    fichaTecnica: VehiculoInventario | null;
+    resumenFinanciero: {
+        totalInvertido: number; // Suma de compras + gastos
+        precioVenta: number;    // Si se vendió
+        margenAproximado: number;
+    };
+    historialMovimientos: MovimientoKardex[];
 }
 
 export interface DashboardInventarioResponse {
-    resumen: ResumenInventario;
+    resumen: {
+        totalVehiculosRegistrados: number;
+        totalActivos: number;
+        totalBaja: number;
+        fechaActualizacion: string;
+    };
     listado: VehiculoInventario[];
 }
