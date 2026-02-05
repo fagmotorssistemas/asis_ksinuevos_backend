@@ -1,3 +1,5 @@
+// src/api/contratos/contratos.interface.ts
+
 export interface ContratoResumen {
     notaVenta: string;
     fechaVenta: string;
@@ -5,6 +7,11 @@ export interface ContratoResumen {
     clienteNombre: string;
     ccoCodigo: string;
     ccoEmpresa: number;
+}
+
+export interface CuotaAdicional {
+    monto: number;
+    letras: string;
 }
 
 export interface ContratoDetalle {
@@ -59,23 +66,25 @@ export interface ContratoDetalle {
     vehiculo: string;            // VEHICULO
     totSeguroTrans: string;      // TOT_SEGURO_TRANS
     totRastreador: string;       // TOT_RASTREADOR
+
+    // --- PAGOS Y RECEPCIONES ---
+    montoVehiculoUsado: number;
+    letrasVehiculoUsado: string;
+    
+    // Estos campos mantienen la suma total
+    montoCuotaAdicional: number; 
+    letrasCuotaAdicional: string;
+
+    // ESTA ES LA CLAVE: El array para desglosar las cuotas en la tabla
+    listaCuotasAdicionales: CuotaAdicional[];
 }
 
 export interface CuotaAmortizacion {
     nroCuota: number;
     fechaVencimiento: string;
     capital: number;
-    interes: string;
+    interes: number;
+    gastos: number;
     valorCuota: string;
     saldoCapital: number;
-}
-
-// contratos.interface.ts
-
-export interface ContratoDetalle {
-    totRastreador: string;
-    montoVehiculoUsado: number;
-    letrasVehiculoUsado: string;
-    montoCuotaAdicional: number;
-    letrasCuotaAdicional: string;
 }
