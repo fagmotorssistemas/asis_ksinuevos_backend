@@ -3,10 +3,13 @@ import { getConnection } from '../../config/oracle';
 import { ContratoResumen, ContratoDetalle, CuotaAmortizacion } from './contratos.interface';
 
 const CODIGO_EMPRESA = 162;
+// Códigos de pago descubiertos
+const CODIGO_PAGO_VEHICULO_USADO = 10001348;
+const CODIGO_PAGO_CUOTA_ADICIONAL = 10001350;
 
 export class ContratosRepository {
 
-    // CONSULTA 1: Listado General
+    // CONSULTA 1: Listado General (Sin cambios)
     async getResumenContratos(): Promise<ContratoResumen[]> {
         let connection;
         try {
@@ -37,7 +40,7 @@ export class ContratosRepository {
         }
     }
 
-    // --- HELPER: Buscar Apoderado ---
+    // --- HELPER 1: Buscar Apoderado (Sin cambios) ---
     private async buscarApoderado(connection: oracledb.Connection, dfacProducto: number): Promise<string> {
         try {
             const sql = `
@@ -64,33 +67,71 @@ export class ContratosRepository {
                         AND    b2.cco_estado = 2
                 )
             `;
-
             const result: any = await connection.execute(
                 sql,
                 [CODIGO_EMPRESA, dfacProducto],
                 { outFormat: oracledb.OUT_FORMAT_OBJECT }
             );
-
             if (result.rows && result.rows.length > 0) {
                 return result.rows[0].DATOS_APODERADO;
             }
             return 'No registrado / Compra Directa';
-
         } catch (error) {
             console.error('Error buscando apoderado:', error);
             return 'Error al consultar';
         }
     }
 
-    // CONSULTA 2: Detalle Completo (CORREGIDA)
+    // --- HELPER 2: Obtener Pagos Específicos (CORREGIDO) ---
+    private async getPagoEspecifco(connection: oracledb.Connection, ccoCodigo: string, codigoPago: number): Promise<{ monto: number, letras: string }> {
+        try {
+            // CORRECCIÓN: Quitamos "DATA_USR." antes de ast_gen
+            // Mantenemos "DATA_USR." en las tablas ccomfac y drecibo
+            const sql = `
+                SELECT 
+                    SUM(d.dfp_monto) AS MONTO,
+                    ast_gen.cambia_numeros_letras(SUM(NVL(d.dfp_monto, 0))) AS LETRAS
+                FROM 
+                    DATA_USR.ccomfac a, 
+                    DATA_USR.drecibo d
+                WHERE 
+                    a.cfac_cco_comproba = :ccoCodigo 
+                    AND a.cfac_empresa = :empresa
+                    AND a.cfac_cco_recibo = d.dfp_cco_comproba
+                    AND a.cfac_empresa = d.dfp_empresa
+                    AND d.dfp_tipopago = :codigoPago
+                GROUP BY 
+                    d.dfp_tipopago
+            `;
+
+            const result: any = await connection.execute(
+                sql,
+                { ccoCodigo: ccoCodigo, empresa: CODIGO_EMPRESA, codigoPago: codigoPago },
+                { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            );
+
+            if (result.rows && result.rows.length > 0) {
+                return {
+                    monto: result.rows[0].MONTO,
+                    letras: result.rows[0].LETRAS
+                };
+            }
+            return { monto: 0, letras: 'CERO 00/100' };
+
+        } catch (error) {
+            console.error(`Error buscando pago código ${codigoPago}:`, error);
+            // Retornamos valores por defecto en lugar de lanzar error para no romper todo el detalle
+            return { monto: 0, letras: 'Error' };
+        }
+    }
+
+    // CONSULTA 2: Detalle Completo (Sin cambios en lógica, solo usa el helper corregido)
     async getDetalleContratoPorId(ccoCodigo: string): Promise<ContratoDetalle | null> {
         let connection;
         try {
             connection = await getConnection();
             
-            // Se eliminó TOTAL_LETRAS por causar ORA-00904
-            // Se utiliza TOTAL_PAGARE_MAS_LETRAS o DFAC_PRECIO_LETRAS en su lugar según el JSON
-            const sql = `
+            const sqlPrincipal = `
                 SELECT 
                     DATOS_VEHICULO, NOTA_VENTA, FECHA_VENTA, CLIENTE, SIS_NOMBRE, 
                     CCO_FECHA, CCO_FECHA_DADO, CCO_FECHACR, CCO_FECHA_CI, CCO_FECHA1, 
@@ -109,16 +150,17 @@ export class ContratosRepository {
             `;
             
             const result: any = await connection.execute(
-                sql, [ccoCodigo], { outFormat: oracledb.OUT_FORMAT_OBJECT }
+                sqlPrincipal, [ccoCodigo], { outFormat: oracledb.OUT_FORMAT_OBJECT }
             );
 
             if (result.rows.length === 0) return null;
             const row = result.rows[0];
 
-            let nombreApoderado = 'N/A';
-            if (row.DFAC_PRODUCTO) {
-                nombreApoderado = await this.buscarApoderado(connection, row.DFAC_PRODUCTO);
-            }
+            const [nombreApoderado, infoVehiculoUsado, infoCuotaAdicional] = await Promise.all([
+                row.DFAC_PRODUCTO ? this.buscarApoderado(connection, row.DFAC_PRODUCTO) : Promise.resolve('N/A'),
+                this.getPagoEspecifco(connection, ccoCodigo, CODIGO_PAGO_VEHICULO_USADO),
+                this.getPagoEspecifco(connection, ccoCodigo, CODIGO_PAGO_CUOTA_ADICIONAL)
+            ]);
 
             return {
                 notaVenta: row.NOTA_VENTA,
@@ -127,7 +169,6 @@ export class ContratosRepository {
                 sistemaNombre: row.SIS_NOMBRE,
                 textoFecha: row.CCO_FECHA,
                 totalFinal: row.TOTAL_FINAL,
-                // Mapeamos TOTAL_PAGARE_MAS_LETRAS a la propiedad totalLetras de la interfaz
                 totalLetras: row.TOTAL_PAGARE_MAS_LETRAS, 
                 facturaNombre: row.CFAC_NOMBRE,
                 facturaRuc: row.CFAC_CED_RUC,
@@ -168,7 +209,12 @@ export class ContratosRepository {
                 totalPagareMasLetras: row.TOTAL_PAGARE_MAS_LETRAS,
                 vehiculo: row.VEHICULO,
                 totSeguroTrans: row.TOT_SEGURO_TRANS,
-                totRastreador: row.TOT_RASTREADOR
+                totRastreador: row.TOT_RASTREADOR,
+                // CAMPOS CALCULADOS
+                montoVehiculoUsado: infoVehiculoUsado.monto,
+                letrasVehiculoUsado: infoVehiculoUsado.letras,
+                montoCuotaAdicional: infoCuotaAdicional.monto,
+                letrasCuotaAdicional: infoCuotaAdicional.letras
             };
         } catch (error) {
             console.error(`Error en getDetalleContratoPorId ID ${ccoCodigo}:`, error);
@@ -178,7 +224,7 @@ export class ContratosRepository {
         }
     }
 
-    // CONSULTA 3: Amortización
+    // CONSULTA 3: Amortización (Sin cambios)
     async getAmortizacionPorContrato(ccoCodigo: string): Promise<CuotaAmortizacion[]> {
         let connection;
         try {

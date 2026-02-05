@@ -68,3 +68,13 @@ export interface CuotaAmortizacion {
     valorCuota: string;
     saldoCapital: number;
 }
+
+// contratos.interface.ts
+
+export interface ContratoDetalle {
+    totRastreador: string;
+    montoVehiculoUsado: number;
+    letrasVehiculoUsado: string;
+    montoCuotaAdicional: number;
+    letrasCuotaAdicional: string;
+}
