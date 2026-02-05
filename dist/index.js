@@ -52,23 +52,25 @@ const startServer = async () => {
         const server = app.listen(PORT, () => {
             console.log(`🚀 Servidor corriendo con éxito en http://localhost:${PORT}`);
             console.log('---------------------------------------------------------');
-            console.log(`📊 Cartera KPI:      http://localhost:${PORT}/api/cartera/kpi`);
-            console.log(`💰 Tesorería Dash:   http://localhost:${PORT}/api/tesoreria/dashboard`);
-            console.log(`👥 Empleados Dash:   http://localhost:${PORT}/api/empleados/dashboard`);
-            console.log(`🚗 Ventas Dash:      http://localhost:${PORT}/api/ventas/dashboard`);
-            console.log(`📈 Finanzas Dash:    http://localhost:${PORT}/api/finanzas/dashboard`);
-            console.log(`📋 Cobros Dash:      http://localhost:${PORT}/api/cobros/dashboard`);
+            console.log(`📊 Cartera KPI:      http://localhost:${PORT}/api/cartera/kpi`);
+            console.log(`💰 Tesorería Dash:   http://localhost:${PORT}/api/tesoreria/dashboard`);
+            console.log(`👥 Empleados Dash:   http://localhost:${PORT}/api/empleados/dashboard`);
+            console.log(`🚗 Ventas Dash:      http://localhost:${PORT}/api/ventas/dashboard`);
+            console.log(`📈 Finanzas Dash:    http://localhost:${PORT}/api/finanzas/dashboard`);
+            console.log(`📋 Cobros Dash:      http://localhost:${PORT}/api/cobros/dashboard`);
             console.log('--- Módulo Contratos ---');
-            console.log(`📑 Lista General:    http://localhost:${PORT}/api/contratos/list`);
-            console.log(`🔍 Detalle (Ej):     http://localhost:${PORT}/api/contratos/detalle/100000000000000000000000883`); // ID de prueba real
-            console.log(`🧾 Amortiz (Ej):     http://localhost:${PORT}/api/contratos/amortizacion/100000000000000000000000883`);
-            console.log(`📊 Pagos Dash:       http://localhost:${PORT}/api/pagos/dashboard`);
-            console.log(`📊 Inventario Dash:  http://localhost:${PORT}/api/inventario/dashboard`);
+            console.log(`📑 Lista General:    http://localhost:${PORT}/api/contratos/list`);
+            console.log(`🔍 Detalle (Ej):     http://localhost:${PORT}/api/contratos/detalle/100000000000000000000000883`); // ID de prueba real
+            console.log(`🧾 Amortiz (Ej):     http://localhost:${PORT}/api/contratos/amortizacion/100000000000000000000000883`);
+            console.log(`📊 Pagos Dash:       http://localhost:${PORT}/api/pagos/dashboard`);
+            console.log('--- Módulo Inventario ---');
+            console.log(`🚙 Inventario Dash:  http://localhost:${PORT}/api/inventario/dashboard`);
+            console.log(`📜 Historial (Ej):   http://localhost:${PORT}/api/inventario/detalle/UBX0763`);
             console.log('---------------------------------------------------------');
         });
         // Manejo de cierre graceful
         const gracefulShutdown = async (signal) => {
-            console.log(`\n⚠️  Señal ${signal} recibida. Cerrando servidor...`);
+            console.log(`\n⚠️  Señal ${signal} recibida. Cerrando servidor...`);
             server.close(async () => {
                 console.log('🔒 Servidor HTTP cerrado');
                 try {

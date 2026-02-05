@@ -11,6 +11,7 @@ export interface ContratoDetalle {
     // --- CAMPOS EXISTENTES ---
     notaVenta: string;
     fechaVenta: string;
+    fechaVentaFull?: string;
     cliente: string;
     sistemaNombre: string;
     textoFecha: string;         // CCO_FECHA

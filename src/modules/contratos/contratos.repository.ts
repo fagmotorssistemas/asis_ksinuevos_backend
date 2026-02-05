@@ -120,12 +120,11 @@ export class ContratosRepository {
 
         } catch (error) {
             console.error(`Error buscando pago código ${codigoPago}:`, error);
-            // Retornamos valores por defecto en lugar de lanzar error para no romper todo el detalle
             return { monto: 0, letras: 'Error' };
         }
     }
 
-    // CONSULTA 2: Detalle Completo (Sin cambios en lógica, solo usa el helper corregido)
+    // CONSULTA 2: Detalle Completo (ACTUALIZADA CON FECHA FULL)
     async getDetalleContratoPorId(ccoCodigo: string): Promise<ContratoDetalle | null> {
         let connection;
         try {
@@ -133,7 +132,11 @@ export class ContratosRepository {
             
             const sqlPrincipal = `
                 SELECT 
-                    DATOS_VEHICULO, NOTA_VENTA, FECHA_VENTA, CLIENTE, SIS_NOMBRE, 
+                    DATOS_VEHICULO, NOTA_VENTA, FECHA_VENTA, 
+                    -- CAMBIO AQUÍ: Traemos la fecha formateada explícitamente con hora
+                    TO_CHAR(FECHA_VENTA, 'YYYY-MM-DD HH24:MI:SS') as FECHA_VENTA_FULL,
+
+                    CLIENTE, SIS_NOMBRE, 
                     CCO_FECHA, CCO_FECHA_DADO, CCO_FECHACR, CCO_FECHA_CI, CCO_FECHA1, 
                     TOT_TOTAL, CFAC_NOMBRE, CFAC_CED_RUC, CFAC_DIRECCION, 
                     CFAC_TELEFONO, UBI_NOMBRE, DFAC_PRODUCTO, CIUDAD_CLIENTE, NRO_CONTRATO, 
@@ -165,6 +168,9 @@ export class ContratosRepository {
             return {
                 notaVenta: row.NOTA_VENTA,
                 fechaVenta: row.FECHA_VENTA,
+                // CAMBIO AQUÍ: Mapeamos el nuevo campo
+                fechaVentaFull: row.FECHA_VENTA_FULL,
+
                 cliente: row.CLIENTE,
                 sistemaNombre: row.SIS_NOMBRE,
                 textoFecha: row.CCO_FECHA,
