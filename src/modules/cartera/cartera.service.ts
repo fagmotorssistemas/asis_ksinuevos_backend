@@ -59,4 +59,10 @@ export class CarteraService {
     async obtenerAmortizacion(clienteId: number, creditoId: string): Promise<CuotaAmortizacion[]> {
         return await this.repository.getTablaAmortizacion(clienteId, creditoId);
     }
+    
+    // Búsqueda optimizada por número físico
+    async buscarDocumentoPorNumeroFisico(numeroFisico: string): Promise<DetalleDocumento | null> {
+        return await this.repository.getDocumentoByNumeroFisico(numeroFisico);
+    } 
+
 }

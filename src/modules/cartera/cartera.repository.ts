@@ -579,6 +579,98 @@ export class CarteraRepository {
         }
     }
 
+    async getDocumentoByNumeroFisico(numeroFisico: string): Promise<DetalleDocumento | null> {
+        let connection;
+        try {
+            connection = await getConnection();
+
+
+            const sql = `
+                SELECT
+                    CLI_CODIGO,
+                    CLI_NOMBRE,
+                    CLI_ID,
+                    TPD_NOMBRE,
+                    DDO_DOCTRAN,
+                    COMPROBANTE1,
+                    DDO_PAGO,
+                    CLI_TELEFONO1,
+                    CLI_TELEFONO2,
+                    CLI_TELEFONO3,
+                    DDO_FECHA_EMI,
+                    DDO_FECHA_VEN,
+                    TIPO_VENCIMIENTO,
+                    DSP_V_INICIAL,
+                    DSP_SALDO,
+                    ALM_NOMBRE as TIENDA,
+                    OBS_OBSERVAC,
+                    CAT_NOMBRE,
+                    CCL_NOMBRE
+                FROM DATA_USR.V_CXC_CARTERA_TOTAL
+                WHERE COMPROBANTE1 = :numeroFisico
+                AND CLI_EMPRESA = :empresa
+                AND DSP_SALDO > 0.01
+                AND ROWNUM = 1
+            `;
+
+
+            const result: any = await connection.execute(
+                sql,
+                [numeroFisico, CODIGO_EMPRESA],
+                { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            );
+
+
+            if (!result.rows || result.rows.length === 0) {
+                return null;
+            }
+
+
+            const row = result.rows[0];
+            const today = new Date();
+
+
+            const fechaVenStr = parseOracleDate(row.DDO_FECHA_VEN);
+            let diffDays = 0;
+           
+            if (fechaVenStr) {
+                const fechaVen = new Date(fechaVenStr);
+                const diffTime = today.getTime() - fechaVen.getTime();
+                diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            }
+
+
+            return {
+                nombreCliente: row.CLI_NOMBRE,
+                identificacion: row.CLI_ID,
+                tipoDocumento: row.TPD_NOMBRE || 'Doc',
+                numeroDocumento: row.DDO_DOCTRAN,
+                numeroFisico: row.COMPROBANTE1 || row.DDO_DOCTRAN,
+                numeroCuota: row.DDO_PAGO || 1,
+                fechaEmision: parseOracleDate(row.DDO_FECHA_EMI) || new Date().toISOString(),
+                fechaVencimiento: fechaVenStr || new Date().toISOString(),
+                diasMora: diffDays > 0 ? diffDays : 0,
+                estadoVencimiento: row.TIPO_VENCIMIENTO,
+                valorOriginal: row.DSP_V_INICIAL,
+                saldoPendiente: row.DSP_SALDO,
+                tienda: row.TIENDA || 'Matriz',
+                observacionDoc: row.OBS_OBSERVAC || '',
+                categoriaCliente: row.CAT_NOMBRE,
+                cobrador: row.CCL_NOMBRE || 'Sin Asignar',
+                telefono1: row.CLI_TELEFONO1,
+                telefono2: row.CLI_TELEFONO2,
+                telefono3: row.CLI_TELEFONO3
+            };
+
+
+        } catch (error) {
+            console.error('Error en getDocumentoByNumeroFisico:', error);
+            throw error;
+        } finally {
+            if (connection) await connection.close();
+        }
+    }
+
     // =========================================================
     //   FIX CRÍTICO 2: TABLA DE AMORTIZACIÓN (ACTUALIZADO)
     //   - Usa lógica de Saldo Pendiente Real con Window Functions

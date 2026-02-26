@@ -111,3 +111,26 @@ export const getAmortizacionCredito = async (req: Request, res: Response) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+// Búsqueda optimizada por número físico
+export const getDocumentoPorNumeroFisico = async (req: Request, res: Response) => {
+    try {
+        const numeroFisico = req.params.numeroFisico;
+
+        if (!numeroFisico) {
+            res.status(400).json({ success: false, message: "Número físico requerido" });
+            return;
+        }
+
+        const documento = await carteraService.buscarDocumentoPorNumeroFisico(numeroFisico);
+        
+        if (!documento) {
+            res.status(404).json({ success: false, message: "Documento no encontrado" });
+            return;
+        }
+
+        res.json({ success: true, data: documento });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

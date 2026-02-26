@@ -7,7 +7,8 @@ import {
     getTodosDeudores,
     getClientePorCedula,
     getCreditosCliente,
-    getAmortizacionCredito
+    getAmortizacionCredito, 
+    getDocumentoPorNumeroFisico
 } from './cartera.controller'; // Ajusta la ruta si es necesario
 
 const router = Router();
@@ -24,5 +25,10 @@ router.get('/creditos/:id', getCreditosCliente);
 // --- RUTA ACTUALIZADA PARA AMORTIZACIÓN ---
 // Ahora requiere Cliente ID y Crédito ID para ser precisos
 router.get('/amortizacion/:clienteId/:creditoId', getAmortizacionCredito);
+
+
+// --- RUTA OPTIMIZADA PARA BÚSQUEDA POR NÚMERO FÍSICO ---
+// Búsqueda directa sin iterar sobre todos los deudores
+router.get('/documento/fisico/:numeroFisico', getDocumentoPorNumeroFisico);
 
 export default router;

@@ -45,6 +45,7 @@ app.use('/api/cobros', cobrosRoutes);       // Recaudación (Vista ksi_cobros
 app.use('/api/contratos', contratosRoutes); // Contratos y Amortización
 app.use('/api/pagos', pagosRoutes);         // Pagos realizados
 app.use('/api/inventario', inventarioRoutes); // Inventario de vehículos
+app.use('/api/inventario', carteraRoutes); // Inventario numerodeventa fisico
 // --- FIN REGISTRO DE RUTAS ---
 
 const startServer = async () => {
@@ -56,6 +57,7 @@ const startServer = async () => {
             console.log(`🚀 Servidor corriendo con éxito en http://localhost:${PORT}`);
             console.log('---------------------------------------------------------');
             console.log(`📊 Cartera KPI:      http://localhost:${PORT}/api/cartera/kpi`);
+            console.log(`🧾 Cartera Doc Fis:  http://localhost:${PORT}/api/cartera/documento/fisico`);
             console.log(`💰 Tesorería Dash:   http://localhost:${PORT}/api/tesoreria/dashboard`);
             console.log(`👥 Empleados Dash:   http://localhost:${PORT}/api/empleados/dashboard`);
             console.log(`🚗 Ventas Dash:      http://localhost:${PORT}/api/ventas/dashboard`);
