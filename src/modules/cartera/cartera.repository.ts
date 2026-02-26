@@ -594,6 +594,12 @@ export class CarteraRepository {
                     DDO_DOCTRAN,
                     COMPROBANTE1,
                     DDO_PAGO,
+                    (
+                        SELECT MAX(DDO_PAGO)
+                        FROM DATA_USR.V_CXC_CARTERA_TOTAL v2
+                        WHERE v2.DDO_DOCTRAN = V_CXC_CARTERA_TOTAL.DDO_DOCTRAN
+                        AND v2.CLI_EMPRESA = V_CXC_CARTERA_TOTAL.CLI_EMPRESA
+                    ) AS TOTAL_CUOTAS,
                     CLI_TELEFONO1,
                     CLI_TELEFONO2,
                     CLI_TELEFONO3,
@@ -647,6 +653,7 @@ export class CarteraRepository {
                 numeroDocumento: row.DDO_DOCTRAN,
                 numeroFisico: row.COMPROBANTE1 || row.DDO_DOCTRAN,
                 numeroCuota: row.DDO_PAGO || 1,
+                totalCuotas: row.TOTAL_CUOTAS || 0,
                 fechaEmision: parseOracleDate(row.DDO_FECHA_EMI) || new Date().toISOString(),
                 fechaVencimiento: fechaVenStr || new Date().toISOString(),
                 diasMora: diffDays > 0 ? diffDays : 0,
