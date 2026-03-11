@@ -246,7 +246,13 @@ export class ContratosRepository {
                 listaCuotasAdicionales: listaAdicionales, // LISTA DESGLOSADA (Clave para la Page6)
                 listaPagosCheque: listaPagosCheque // Pagos con dfp_tipopago = 10001347 (cheque)
             };
-        } catch (error) {
+        } catch (error: any) {
+            // ORA-01427: la vista KSI_CONTRATOS_V tiene una subconsulta que devuelve más de una fila para este contrato (datos duplicados).
+            // Solución definitiva: que el DBA/Oracle corrija la vista para que esa subconsulta devuelva solo una fila (ej. MAX() o ROWNUM=1).
+            if (error?.errorNum === 1427 || error?.code === 'ORA-01427') {
+                console.error(`ORA-01427 en getDetalleContratoPorId: contrato ${ccoCodigo}. Revisar vista KSI_CONTRATOS_V (subconsulta devuelve más de una fila).`, error?.message);
+                return null;
+            }
             console.error(`Error en getDetalleContratoPorId ID ${ccoCodigo}:`, error);
             throw error;
         } finally {
