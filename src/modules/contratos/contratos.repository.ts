@@ -7,6 +7,7 @@ const CODIGO_EMPRESA = 162;
 // Códigos de pago específicos del sistema
 const CODIGO_PAGO_VEHICULO_USADO = 10001348;
 const CODIGO_PAGO_CUOTA_ADICIONAL = 10001350;
+const CODIGO_PAGO_CHEQUE = 10001347;
 
 export class ContratosRepository {
 
@@ -179,12 +180,13 @@ export class ContratosRepository {
             if (result.rows.length === 0) return null;
             const row = result.rows[0];
 
-            // Traemos los datos adicionales, incluyendo la nueva lista desglosada
-            const [nombreApoderado, infoVehiculoUsado, infoTotalCuotaAdicional, listaAdicionales] = await Promise.all([
+            // Traemos los datos adicionales, incluyendo listas desglosadas (cuota adicional y cheque)
+            const [nombreApoderado, infoVehiculoUsado, infoTotalCuotaAdicional, listaAdicionales, listaPagosCheque] = await Promise.all([
                 row.DFAC_PRODUCTO ? this.buscarApoderado(connection, row.DFAC_PRODUCTO) : Promise.resolve('N/A'),
                 this.getPagoEspecifco(connection, ccoCodigo, CODIGO_PAGO_VEHICULO_USADO),
                 this.getPagoEspecifco(connection, ccoCodigo, CODIGO_PAGO_CUOTA_ADICIONAL),
-                this.getListaPagosAdicionales(connection, ccoCodigo, CODIGO_PAGO_CUOTA_ADICIONAL)
+                this.getListaPagosAdicionales(connection, ccoCodigo, CODIGO_PAGO_CUOTA_ADICIONAL),
+                this.getListaPagosAdicionales(connection, ccoCodigo, CODIGO_PAGO_CHEQUE)
             ]);
 
             return {
@@ -241,7 +243,8 @@ export class ContratosRepository {
                 letrasVehiculoUsado: infoVehiculoUsado.letras,
                 montoCuotaAdicional: infoTotalCuotaAdicional.monto, // Total sumado
                 letrasCuotaAdicional: infoTotalCuotaAdicional.letras,
-                listaCuotasAdicionales: listaAdicionales // LISTA DESGLOSADA (Clave para la Page6)
+                listaCuotasAdicionales: listaAdicionales, // LISTA DESGLOSADA (Clave para la Page6)
+                listaPagosCheque: listaPagosCheque // Pagos con dfp_tipopago = 10001347 (cheque)
             };
         } catch (error) {
             console.error(`Error en getDetalleContratoPorId ID ${ccoCodigo}:`, error);

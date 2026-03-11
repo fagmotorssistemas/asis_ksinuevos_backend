@@ -77,6 +77,9 @@ export interface ContratoDetalle {
 
     // ESTA ES LA CLAVE: El array para desglosar las cuotas en la tabla
     listaCuotasAdicionales: CuotaAdicional[];
+
+    /** Pagos en cheque (dfp_tipopago = 10001347). Misma estructura monto/letras. */
+    listaPagosCheque: CuotaAdicional[];
 }
 
 export interface CuotaAmortizacion {
