@@ -79,23 +79,31 @@ export class ContratosRepository {
         }
     }
 
-    // --- HELPER: Obtener Lista de Pagos Adicionales (DESGLOSADOS) ---
+    // --- HELPER: Obtener Lista de Pagos Adicionales (DESGLOSADOS) con fecha de vencimiento ---
+    // Fecha de vencimiento real: de drecibo (ej. dfp_fecha_ven). Si no existe esa columna, ver docs/consulta_columnas_drecibo.sql
     private async getListaPagosAdicionales(connection: oracledb.Connection, ccoCodigo: string, codigoPago: number): Promise<CuotaAdicional[]> {
         try {
-            // Eliminamos el SUM y el GROUP BY para obtener cada registro individual
+            // Usar NVL(d.dfp_fecha_ven, r.cco_fecha): si drecibo tiene fecha vencimiento la usamos; si no, fecha del recibo
+            // Si falla ORA-00904, ejecuta docs/consulta_columnas_drecibo.sql y ajusta el nombre de la columna (ej. dfp_fech_ven)
             const sql = `
                 SELECT 
+                    TO_CHAR(d.dfp_cco_comproba) AS CCO_RECIBO,
                     d.dfp_monto AS MONTO,
-                    ast_gen.cambia_numeros_letras(NVL(d.dfp_monto, 0)) AS LETRAS
+                    ast_gen.cambia_numeros_letras(NVL(d.dfp_monto, 0)) AS LETRAS,
+                    TO_CHAR(NVL(d.dfp_fecha_ven, r.cco_fecha), 'YYYY-MM-DD') AS FECHA_VENCIMIENTO,
+                    TO_CHAR(NVL(d.dfp_fecha_ven, r.cco_fecha), 'DD/MM/YYYY') AS FECHA_VENCIMIENTO_DMY
                 FROM 
                     DATA_USR.ccomfac a, 
-                    DATA_USR.drecibo d
+                    DATA_USR.drecibo d,
+                    DATA_USR.ccomproba r
                 WHERE 
                     a.cfac_cco_comproba = :ccoCodigo 
                     AND a.cfac_empresa = :empresa
                     AND a.cfac_cco_recibo = d.dfp_cco_comproba
                     AND a.cfac_empresa = d.dfp_empresa
                     AND d.dfp_tipopago = :codigoPago
+                    AND r.cco_codigo = d.dfp_cco_comproba
+                    AND r.cco_empresa = d.dfp_empresa
             `;
 
             const result: any = await connection.execute(
@@ -106,7 +114,9 @@ export class ContratosRepository {
 
             return result.rows.map((row: any) => ({
                 monto: row.MONTO,
-                letras: row.LETRAS
+                letras: row.LETRAS,
+                fechaVencimiento: row.FECHA_VENCIMIENTO_DMY || row.FECHA_VENCIMIENTO || null,
+                ccoRecibo: row.CCO_RECIBO || ''
             }));
         } catch (error) {
             console.error(`Error buscando lista de pagos código ${codigoPago}:`, error);

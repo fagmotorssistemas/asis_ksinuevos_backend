@@ -12,6 +12,10 @@ export interface ContratoResumen {
 export interface CuotaAdicional {
     monto: number;
     letras: string;
+    /** Fecha de vencimiento real (DFP_FECHA_VEN de drecibo) */
+    fechaVencimiento: string | null;
+    /** Código del comprobante de recibo (relación con el recibo de pago) */
+    ccoRecibo: string;
 }
 
 export interface ContratoDetalle {
