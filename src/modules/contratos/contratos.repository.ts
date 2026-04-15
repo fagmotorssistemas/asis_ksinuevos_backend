@@ -257,13 +257,13 @@ export class ContratosRepository {
                 listaPagosCheque: listaPagosCheque // Pagos con dfp_tipopago = 10001347 (cheque)
             };
         } catch (error: any) {
-            // ORA-01427: la vista KSI_CONTRATOS_V tiene una subconsulta que devuelve más de una fila para este contrato (datos duplicados).
-            // Solución definitiva: que el DBA/Oracle corrija la vista para que esa subconsulta devuelva solo una fila (ej. MAX() o ROWNUM=1).
-            if (error?.errorNum === 1427 || error?.code === 'ORA-01427') {
-                console.error(`ORA-01427 en getDetalleContratoPorId: contrato ${ccoCodigo}. Revisar vista KSI_CONTRATOS_V (subconsulta devuelve más de una fila).`, error?.message);
-                return null;
+            // ORA-XXXXX: Si hay cualquier error interno de Oracle generado por datos sucios en la vista 
+            // (ej. ORA-01427 duplicados, ORA-01722 conversión, ORA-01861 fechas)
+            if (error?.errorNum || (error?.message && error.message.includes('ORA-'))) {
+                console.error(`Error de Oracle al consultar vista KSI_CONTRATOS_V para el contrato ${ccoCodigo}:`, error?.message || error);
+                return null; // Retornamos null para que el Controller devuelva 404 de manera controlada
             }
-            console.error(`Error en getDetalleContratoPorId ID ${ccoCodigo}:`, error);
+            console.error(`Error inesperado en getDetalleContratoPorId ID ${ccoCodigo}:`, error);
             throw error;
         } finally {
             if (connection) await connection.close();
