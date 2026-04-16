@@ -467,41 +467,46 @@ export class CarteraRepository {
         try {
             connection = await getConnection();
 
+            // Misma fuente que Cobros (ksi_cobros_v), filtrada por cliente vía CLI_ID = COD_CLIENTE.
+            // Incluye recibos, depósitos, cruces documentarios, etc.; alineado con lo que ve el usuario en Contabilidad → Cobros.
             const sql = `
                 SELECT 
-                    C.CCO_FECHA,
-                    C.CCO_NUMERO,
-                    C.CCO_DOCTRAN,
-                    C.CCO_CONCEPTO,
-                    C.CREA_USR,
-                    D.DFP_MONTO,
-                    D.DFP_TIPOPAGO,
-                    D.DFP_NRO_DOCUM
-                FROM DATA_USR.CCOMPROBA C
-                JOIN DATA_USR.DRECIBO D ON C.CCO_CODIGO = D.DFP_CCO_COMPROBA
-                WHERE C.CCO_CODCLIPRO = :id
-                AND C.CCO_EMPRESA = :empresa
-                AND C.CCO_TIPODOC = 15
-                AND C.CCO_ESTADO <> 9 
-                ORDER BY C.CCO_FECHA DESC
+                    v.TIPO_DOCUMENTO,
+                    v.COMPROBANTE_PAGO,
+                    v.FECHA_PAGO,
+                    v.TIPO_PAGO,
+                    v.COMPROBANTE_DEUDA,
+                    v.VALOR_CANCELA,
+                    v.CONCEPTO,
+                    v.CUOTA,
+                    v.DOCUMENTO_FACTURA
+                FROM ksi_cobros_v v
+                INNER JOIN DATA_USR.CLIENTE c 
+                    ON TRIM(c.CLI_ID) = TRIM(v.COD_CLIENTE)
+                WHERE c.CLI_CODIGO = :clienteId
+                ORDER BY v.FECHA_PAGO DESC
             `;
 
             const result: any = await connection.execute(
-                sql, 
-                [clienteId, CODIGO_EMPRESA], 
+                sql,
+                [clienteId],
                 { outFormat: oracledb.OUT_FORMAT_OBJECT }
             );
 
             return result.rows.map((row: any) => ({
-                fecha: parseOracleDate(row.CCO_FECHA) || new Date().toISOString(),
-                numeroRecibo: row.CCO_DOCTRAN || String(row.CCO_NUMERO),
-                concepto: row.CCO_CONCEPTO || 'Abono a deuda',
-                montoTotal: row.DFP_MONTO || 0,
-                formaPago: String(row.DFP_TIPOPAGO),
-                referenciaPago: row.DFP_NRO_DOCUM || '-',
-                usuario: row.CREA_USR
+                fecha: parseOracleDate(row.FECHA_PAGO) || new Date().toISOString(),
+                numeroRecibo: row.COMPROBANTE_PAGO || '-',
+                concepto: row.CONCEPTO || 'Abono / cancelación de deuda',
+                montoTotal: parseMoney(row.VALOR_CANCELA),
+                formaPago: (row.TIPO_PAGO && String(row.TIPO_PAGO).trim()) || 'No especificado',
+                referenciaPago:
+                    [row.COMPROBANTE_DEUDA, row.DOCUMENTO_FACTURA].filter(Boolean).join(' · ') ||
+                    '-',
+                usuario: '-',
+                tipoDocumento: row.TIPO_DOCUMENTO
+                    ? String(row.TIPO_DOCUMENTO).trim()
+                    : undefined
             }));
-
         } catch (error) {
             console.error('Error en getHistorialPagos:', error);
             return [];

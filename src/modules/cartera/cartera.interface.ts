@@ -68,9 +68,12 @@ export interface HistorialPago {
     numeroRecibo: string;
     concepto: string;
     montoTotal: number;
+    /** Descripción del medio / forma (ej. depósito, cruce documentario) */
     formaPago: string;
     referenciaPago: string;
     usuario: string;
+    /** Clase de comprobante en cobros (ej. RECIBO DE CLIENTES, DEPOSITO) — misma fuente que /cobros/dashboard */
+    tipoDocumento?: string;
 }
 
 export interface ClienteBusqueda {
