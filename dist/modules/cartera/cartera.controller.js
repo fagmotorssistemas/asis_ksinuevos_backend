@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAmortizacionCredito = exports.getCreditosCliente = exports.getClientePorCedula = exports.getClienteDetalle = exports.buscarClientes = exports.getTodosDeudores = exports.getTopDeudores = exports.getKpiResumen = void 0;
+exports.getDocumentoPorNumeroFisico = exports.getAmortizacionCredito = exports.getCreditosCliente = exports.getClientePorCedula = exports.getClienteDetalle = exports.buscarClientes = exports.getTodosDeudores = exports.getTopDeudores = exports.getKpiResumen = void 0;
 const cartera_service_1 = require("./cartera.service"); // Ajusta la ruta si es necesario
 const carteraService = new cartera_service_1.CarteraService();
 const getKpiResumen = async (req, res) => {
@@ -111,3 +111,23 @@ const getAmortizacionCredito = async (req, res) => {
     }
 };
 exports.getAmortizacionCredito = getAmortizacionCredito;
+// Búsqueda optimizada por número físico
+const getDocumentoPorNumeroFisico = async (req, res) => {
+    try {
+        const numeroFisico = req.params.numeroFisico;
+        if (!numeroFisico) {
+            res.status(400).json({ success: false, message: "Número físico requerido" });
+            return;
+        }
+        const documento = await carteraService.buscarDocumentoPorNumeroFisico(numeroFisico);
+        if (!documento) {
+            res.status(404).json({ success: false, message: "Documento no encontrado" });
+            return;
+        }
+        res.json({ success: true, data: documento });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+exports.getDocumentoPorNumeroFisico = getDocumentoPorNumeroFisico;

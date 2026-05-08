@@ -22,6 +22,15 @@ const getListaContratos = async (req, res) => {
     }
 };
 exports.getListaContratos = getListaContratos;
+// Asegura que cada ítem de cuota/cheque tenga siempre los 4 campos (aunque vacíos) para depuración
+function normalizarItemPago(item) {
+    return {
+        monto: item?.monto ?? 0,
+        letras: item?.letras ?? '',
+        fechaVencimiento: item?.fechaVencimiento ?? null,
+        ccoRecibo: item?.ccoRecibo ?? ''
+    };
+}
 // GET /api/contratos/detalle/:id
 const getDetalleContrato = async (req, res) => {
     try {
@@ -31,9 +40,15 @@ const getDetalleContrato = async (req, res) => {
             res.status(404).json({ success: false, message: 'Contrato no encontrado' });
             return;
         }
+        // Forzar que las listas siempre tengan los 4 campos por ítem (monto, letras, fechaVencimiento, ccoRecibo)
+        const dataNormalizado = {
+            ...data,
+            listaCuotasAdicionales: (data.listaCuotasAdicionales || []).map(normalizarItemPago),
+            listaPagosCheque: (data.listaPagosCheque || []).map(normalizarItemPago)
+        };
         res.json({
             success: true,
-            data: data
+            data: dataNormalizado
         });
     }
     catch (error) {

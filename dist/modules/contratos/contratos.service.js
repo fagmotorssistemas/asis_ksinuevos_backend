@@ -12,6 +12,8 @@ class ContratosService {
         return await this.repository.getResumenContratos();
     }
     // 2. Obtener detalle de UN contrato específico (Bajo demanda)
+    // El repositorio ya se encarga de buscar apoderados, vehículos usados, 
+    // cuotas adicionales y formatear la fecha completa.
     async obtenerDetalleContrato(ccoCodigo) {
         if (!ccoCodigo)
             throw new Error('Se requiere CCO_CODIGO para obtener el detalle');

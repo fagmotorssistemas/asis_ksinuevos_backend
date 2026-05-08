@@ -15,6 +15,7 @@ import finanzasRoutes from './modules/finanzas/finanzas.routes';
 import cobrosRoutes from './modules/cobros/cobros.routes';
 import contratosRoutes from './modules/contratos/contratos.routes';
 import inventarioRoutes from './modules/inventario/inventario.routes';
+import comprobantesRoutes from './modules/comprobantes/comprobantes.routes';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -46,7 +47,17 @@ app.use('/api/contratos', contratosRoutes); // Contratos y Amortización
 app.use('/api/pagos', pagosRoutes);         // Pagos realizados
 app.use('/api/inventario', inventarioRoutes); // Inventario de vehículos
 app.use('/api/inventario', carteraRoutes); // Inventario numerodeventa fisico
+app.use('/api/comprobantes', comprobantesRoutes); // Listado y adjuntos (Supabase + Oracle)
 // --- FIN REGISTRO DE RUTAS ---
+
+app.use(
+    (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+        console.error('Error no manejado:', err);
+        if (res.headersSent) return;
+        const message = err instanceof Error ? err.message : 'Error interno del servidor';
+        res.status(500).json({ success: false, message, code: 'INTERNAL_ERROR' });
+    }
+);
 
 const startServer = async () => {
     try {
@@ -71,6 +82,9 @@ const startServer = async () => {
             console.log('--- Módulo Inventario ---');
             console.log(`🚙 Inventario Dash:  http://localhost:${PORT}/api/inventario/dashboard`);
             console.log(`📜 Historial (Ej):   http://localhost:${PORT}/api/inventario/detalle/UBX0763`);
+            console.log('--- Módulo Comprobantes ---');
+            console.log(`🧾 Listado:          http://localhost:${PORT}/api/comprobantes/listado`);
+            console.log(`📎 Subir imagen:     POST http://localhost:${PORT}/api/comprobantes/:ccoCodigo/imagen`);
             console.log('---------------------------------------------------------');
         });
 

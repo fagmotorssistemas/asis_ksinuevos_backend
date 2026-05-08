@@ -19,6 +19,7 @@ const finanzas_routes_1 = __importDefault(require("./modules/finanzas/finanzas.r
 const cobros_routes_1 = __importDefault(require("./modules/cobros/cobros.routes"));
 const contratos_routes_1 = __importDefault(require("./modules/contratos/contratos.routes"));
 const inventario_routes_1 = __importDefault(require("./modules/inventario/inventario.routes"));
+const comprobantes_routes_1 = __importDefault(require("./modules/comprobantes/comprobantes.routes"));
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
 app.use((0, cors_1.default)());
@@ -44,7 +45,16 @@ app.use('/api/cobros', cobros_routes_1.default); // Recaudación (Vista ksi_cobr
 app.use('/api/contratos', contratos_routes_1.default); // Contratos y Amortización
 app.use('/api/pagos', pagos_routes_1.default); // Pagos realizados
 app.use('/api/inventario', inventario_routes_1.default); // Inventario de vehículos
+app.use('/api/inventario', cartera_routes_1.default); // Inventario numerodeventa fisico
+app.use('/api/comprobantes', comprobantes_routes_1.default); // Listado y adjuntos (Supabase + Oracle)
 // --- FIN REGISTRO DE RUTAS ---
+app.use((err, _req, res, _next) => {
+    console.error('Error no manejado:', err);
+    if (res.headersSent)
+        return;
+    const message = err instanceof Error ? err.message : 'Error interno del servidor';
+    res.status(500).json({ success: false, message, code: 'INTERNAL_ERROR' });
+});
 const startServer = async () => {
     try {
         console.log('⏳ Iniciando servidor ASIS-Backend...');
@@ -53,6 +63,7 @@ const startServer = async () => {
             console.log(`🚀 Servidor corriendo con éxito en http://localhost:${PORT}`);
             console.log('---------------------------------------------------------');
             console.log(`📊 Cartera KPI:      http://localhost:${PORT}/api/cartera/kpi`);
+            console.log(`🧾 Cartera Doc Fis:  http://localhost:${PORT}/api/cartera/documento/fisico`);
             console.log(`💰 Tesorería Dash:   http://localhost:${PORT}/api/tesoreria/dashboard`);
             console.log(`👥 Empleados Dash:   http://localhost:${PORT}/api/empleados/dashboard`);
             console.log(`🚗 Ventas Dash:      http://localhost:${PORT}/api/ventas/dashboard`);
@@ -66,6 +77,9 @@ const startServer = async () => {
             console.log('--- Módulo Inventario ---');
             console.log(`🚙 Inventario Dash:  http://localhost:${PORT}/api/inventario/dashboard`);
             console.log(`📜 Historial (Ej):   http://localhost:${PORT}/api/inventario/detalle/UBX0763`);
+            console.log('--- Módulo Comprobantes ---');
+            console.log(`🧾 Listado:          http://localhost:${PORT}/api/comprobantes/listado`);
+            console.log(`📎 Subir imagen:     POST http://localhost:${PORT}/api/comprobantes/:ccoCodigo/imagen`);
             console.log('---------------------------------------------------------');
         });
         // Manejo de cierre graceful

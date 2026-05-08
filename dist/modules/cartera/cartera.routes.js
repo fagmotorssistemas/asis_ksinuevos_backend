@@ -14,4 +14,7 @@ router.get('/creditos/:id', cartera_controller_1.getCreditosCliente);
 // --- RUTA ACTUALIZADA PARA AMORTIZACIÓN ---
 // Ahora requiere Cliente ID y Crédito ID para ser precisos
 router.get('/amortizacion/:clienteId/:creditoId', cartera_controller_1.getAmortizacionCredito);
+// --- RUTA OPTIMIZADA PARA BÚSQUEDA POR NÚMERO FÍSICO ---
+// Búsqueda directa sin iterar sobre todos los deudores
+router.get('/documento/fisico/:numeroFisico', cartera_controller_1.getDocumentoPorNumeroFisico);
 exports.default = router;

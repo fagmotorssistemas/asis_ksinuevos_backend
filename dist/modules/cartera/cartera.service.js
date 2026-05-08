@@ -49,5 +49,9 @@ class CarteraService {
     async obtenerAmortizacion(clienteId, creditoId) {
         return await this.repository.getTablaAmortizacion(clienteId, creditoId);
     }
+    // Búsqueda optimizada por número físico
+    async buscarDocumentoPorNumeroFisico(numeroFisico) {
+        return await this.repository.getDocumentoByNumeroFisico(numeroFisico);
+    }
 }
 exports.CarteraService = CarteraService;

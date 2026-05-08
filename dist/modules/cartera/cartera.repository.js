@@ -422,33 +422,38 @@ class CarteraRepository {
         let connection;
         try {
             connection = await (0, oracle_1.getConnection)();
+            // Misma fuente que Cobros (ksi_cobros_v), filtrada por cliente vía CLI_ID = COD_CLIENTE.
+            // Incluye recibos, depósitos, cruces documentarios, etc.; alineado con lo que ve el usuario en Contabilidad → Cobros.
             const sql = `
                 SELECT 
-                    C.CCO_FECHA,
-                    C.CCO_NUMERO,
-                    C.CCO_DOCTRAN,
-                    C.CCO_CONCEPTO,
-                    C.CREA_USR,
-                    D.DFP_MONTO,
-                    D.DFP_TIPOPAGO,
-                    D.DFP_NRO_DOCUM
-                FROM DATA_USR.CCOMPROBA C
-                JOIN DATA_USR.DRECIBO D ON C.CCO_CODIGO = D.DFP_CCO_COMPROBA
-                WHERE C.CCO_CODCLIPRO = :id
-                AND C.CCO_EMPRESA = :empresa
-                AND C.CCO_TIPODOC = 15
-                AND C.CCO_ESTADO <> 9 
-                ORDER BY C.CCO_FECHA DESC
+                    v.TIPO_DOCUMENTO,
+                    v.COMPROBANTE_PAGO,
+                    v.FECHA_PAGO,
+                    v.TIPO_PAGO,
+                    v.COMPROBANTE_DEUDA,
+                    v.VALOR_CANCELA,
+                    v.CONCEPTO,
+                    v.CUOTA,
+                    v.DOCUMENTO_FACTURA
+                FROM ksi_cobros_v v
+                INNER JOIN DATA_USR.CLIENTE c 
+                    ON TRIM(c.CLI_ID) = TRIM(v.COD_CLIENTE)
+                WHERE c.CLI_CODIGO = :clienteId
+                ORDER BY v.FECHA_PAGO DESC
             `;
-            const result = await connection.execute(sql, [clienteId, CODIGO_EMPRESA], { outFormat: oracledb_1.default.OUT_FORMAT_OBJECT });
+            const result = await connection.execute(sql, [clienteId], { outFormat: oracledb_1.default.OUT_FORMAT_OBJECT });
             return result.rows.map((row) => ({
-                fecha: parseOracleDate(row.CCO_FECHA) || new Date().toISOString(),
-                numeroRecibo: row.CCO_DOCTRAN || String(row.CCO_NUMERO),
-                concepto: row.CCO_CONCEPTO || 'Abono a deuda',
-                montoTotal: row.DFP_MONTO || 0,
-                formaPago: String(row.DFP_TIPOPAGO),
-                referenciaPago: row.DFP_NRO_DOCUM || '-',
-                usuario: row.CREA_USR
+                fecha: parseOracleDate(row.FECHA_PAGO) || new Date().toISOString(),
+                numeroRecibo: row.COMPROBANTE_PAGO || '-',
+                concepto: row.CONCEPTO || 'Abono / cancelación de deuda',
+                montoTotal: parseMoney(row.VALOR_CANCELA),
+                formaPago: (row.TIPO_PAGO && String(row.TIPO_PAGO).trim()) || 'No especificado',
+                referenciaPago: [row.COMPROBANTE_DEUDA, row.DOCUMENTO_FACTURA].filter(Boolean).join(' · ') ||
+                    '-',
+                usuario: '-',
+                tipoDocumento: row.TIPO_DOCUMENTO
+                    ? String(row.TIPO_DOCUMENTO).trim()
+                    : undefined
             }));
         }
         catch (error) {
@@ -518,6 +523,88 @@ class CarteraRepository {
         }
         catch (error) {
             console.error('Error en getCreditosByClienteId:', error);
+            throw error;
+        }
+        finally {
+            if (connection)
+                await connection.close();
+        }
+    }
+    async getDocumentoByNumeroFisico(numeroFisico) {
+        let connection;
+        try {
+            connection = await (0, oracle_1.getConnection)();
+            const sql = `
+                SELECT
+                    CLI_CODIGO,
+                    CLI_NOMBRE,
+                    CLI_ID,
+                    TPD_NOMBRE,
+                    DDO_DOCTRAN,
+                    COMPROBANTE1,
+                    DDO_PAGO,
+                    (
+                        SELECT MAX(DDO_PAGO)
+                        FROM DATA_USR.V_CXC_CARTERA_TOTAL v2
+                        WHERE v2.DDO_DOCTRAN = V_CXC_CARTERA_TOTAL.DDO_DOCTRAN
+                        AND v2.CLI_EMPRESA = V_CXC_CARTERA_TOTAL.CLI_EMPRESA
+                    ) AS TOTAL_CUOTAS,
+                    CLI_TELEFONO1,
+                    CLI_TELEFONO2,
+                    CLI_TELEFONO3,
+                    DDO_FECHA_EMI,
+                    DDO_FECHA_VEN,
+                    TIPO_VENCIMIENTO,
+                    DSP_V_INICIAL,
+                    DSP_SALDO,
+                    ALM_NOMBRE as TIENDA,
+                    OBS_OBSERVAC,
+                    CAT_NOMBRE,
+                    CCL_NOMBRE
+                FROM DATA_USR.V_CXC_CARTERA_TOTAL
+                WHERE COMPROBANTE1 = :numeroFisico
+                AND CLI_EMPRESA = :empresa
+                AND DSP_SALDO > 0.01
+                AND ROWNUM = 1
+            `;
+            const result = await connection.execute(sql, [numeroFisico, CODIGO_EMPRESA], { outFormat: oracledb_1.default.OUT_FORMAT_OBJECT });
+            if (!result.rows || result.rows.length === 0) {
+                return null;
+            }
+            const row = result.rows[0];
+            const today = new Date();
+            const fechaVenStr = parseOracleDate(row.DDO_FECHA_VEN);
+            let diffDays = 0;
+            if (fechaVenStr) {
+                const fechaVen = new Date(fechaVenStr);
+                const diffTime = today.getTime() - fechaVen.getTime();
+                diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            }
+            return {
+                nombreCliente: row.CLI_NOMBRE,
+                identificacion: row.CLI_ID,
+                tipoDocumento: row.TPD_NOMBRE || 'Doc',
+                numeroDocumento: row.DDO_DOCTRAN,
+                numeroFisico: row.COMPROBANTE1 || row.DDO_DOCTRAN,
+                numeroCuota: row.DDO_PAGO || 1,
+                totalCuotas: row.TOTAL_CUOTAS || 0,
+                fechaEmision: parseOracleDate(row.DDO_FECHA_EMI) || new Date().toISOString(),
+                fechaVencimiento: fechaVenStr || new Date().toISOString(),
+                diasMora: diffDays > 0 ? diffDays : 0,
+                estadoVencimiento: row.TIPO_VENCIMIENTO,
+                valorOriginal: row.DSP_V_INICIAL,
+                saldoPendiente: row.DSP_SALDO,
+                tienda: row.TIENDA || 'Matriz',
+                observacionDoc: row.OBS_OBSERVAC || '',
+                categoriaCliente: row.CAT_NOMBRE,
+                cobrador: row.CCL_NOMBRE || 'Sin Asignar',
+                telefono1: row.CLI_TELEFONO1,
+                telefono2: row.CLI_TELEFONO2,
+                telefono3: row.CLI_TELEFONO3
+            };
+        }
+        catch (error) {
+            console.error('Error en getDocumentoByNumeroFisico:', error);
             throw error;
         }
         finally {

@@ -10,10 +10,10 @@ const CODIGO_EMPRESA = 162;
 class InventarioRepository {
     // 1. Obtiene TODOS los vehículos (Dashboard)
     async getInventarioCompleto() {
+        // CORRECCIÓN: Tipado explícito | undefined para manejar el bloque finally
         let connection;
         try {
             connection = await (0, oracle_1.getConnection)();
-            // CORREGIDO: Nombre exacto de la vista 'ksi_vehculos_v'
             const sql = `
                 SELECT 
                     COD_EMPRESA, EMPRESA, MARCA, PRO_CODIGO, PRO_ID, PLACA,
@@ -26,7 +26,6 @@ class InventarioRepository {
                 WHERE COD_EMPRESA = :empresa
             `;
             const result = await connection.execute(sql, { empresa: CODIGO_EMPRESA }, { outFormat: oracledb_1.default.OUT_FORMAT_OBJECT });
-            // FIX: Validación segura
             const rows = result.rows || [];
             return rows.map((row) => ({
                 codEmpresa: row.COD_EMPRESA,
@@ -78,18 +77,17 @@ class InventarioRepository {
             }
         }
     }
-    // 2. Busca UN vehículo por Placa (Para Ficha Técnica)
+    // 2. Busca UN vehículo por Placa
     async getVehiculoByPlaca(placa) {
+        // CORRECCIÓN: Tipado explícito
         let connection;
         try {
             connection = await (0, oracle_1.getConnection)();
-            // CORREGIDO: Nombre exacto de la vista 'ksi_vehculos_v'
             const sql = `
                 SELECT * FROM ksi_vehculos_v 
                 WHERE COD_EMPRESA = :empresa AND PLACA = :placa
             `;
             const result = await connection.execute(sql, { empresa: CODIGO_EMPRESA, placa: placa }, { outFormat: oracledb_1.default.OUT_FORMAT_OBJECT });
-            // FIX: Validación segura
             if (!result.rows || result.rows.length === 0)
                 return null;
             const row = result.rows[0];
@@ -140,8 +138,9 @@ class InventarioRepository {
                 catch (e) { }
         }
     }
-    // 3. Obtiene el KARDEX (Historial) desde la nueva vista
+    // 3. Obtiene el KARDEX (Historial) - CON LA MODIFICACIÓN DE PRECIOS
     async getMovimientosKardex(placa) {
+        // CORRECCIÓN: Tipado explícito
         let connection;
         try {
             connection = await (0, oracle_1.getConnection)();
@@ -162,20 +161,52 @@ class InventarioRepository {
                 ORDER BY CCO_FECHA DESC, DMO_SECUENCIA DESC
             `;
             const result = await connection.execute(sql, { placa: placa }, { outFormat: oracledb_1.default.OUT_FORMAT_OBJECT });
-            // FIX: Validación segura
             const rows = result.rows || [];
-            return rows.map((row) => ({
-                fecha: row.CCO_FECHA,
-                tipoTransaccion: row.TPD_NOMBRE,
-                concepto: row.CCO_CONCEPTO,
-                documento: row.DSP_COMPROBA,
-                clienteProveedor: row.CLI_NOMBRE,
-                esIngreso: row.DMO_DEBCRE === 1,
-                cantidad: row.DMO_CANTIDAD,
-                costoUnitario: row.DMO_COSTO,
-                total: row.DMO_TOTAL,
-                usuario: row.CREA_USR
+            const movimientos = await Promise.all(rows.map(async (row) => {
+                let costoUnitario = row.DMO_COSTO;
+                let total = row.DMO_TOTAL;
+                // Lógica personalizada: Buscar precio real de venta si existe código NV en el concepto
+                if (row.CCO_CONCEPTO) {
+                    const match = row.CCO_CONCEPTO.match(/(NV-\d{3}-\d{3}-\d+)/);
+                    if (match && match[0]) {
+                        const notaVentaCodigo = match[0];
+                        try {
+                            const sqlVenta = `
+                                SELECT DFAC_PRECIO 
+                                FROM KSI_CONTRATOS_V 
+                                WHERE NOTA_VENTA = :notaVenta
+                            `;
+                            // Como 'connection' puede ser undefined según el tipo, TypeScript podría quejarse aquí
+                            // si no aseguramos que existe, pero dado que estamos dentro del bloque try
+                            // después de la asignación, sabemos que existe. Usamos el operador ! o check if
+                            if (connection) {
+                                const resultVenta = await connection.execute(sqlVenta, { notaVenta: notaVentaCodigo }, { outFormat: oracledb_1.default.OUT_FORMAT_OBJECT });
+                                if (resultVenta.rows && resultVenta.rows.length > 0) {
+                                    const ventaRow = resultVenta.rows[0];
+                                    total = ventaRow.DFAC_PRECIO;
+                                    costoUnitario = ventaRow.DFAC_PRECIO;
+                                }
+                            }
+                        }
+                        catch (err) {
+                            console.warn(`No se pudo obtener precio para NV ${notaVentaCodigo}`, err);
+                        }
+                    }
+                }
+                return {
+                    fecha: row.CCO_FECHA,
+                    tipoTransaccion: row.TPD_NOMBRE,
+                    concepto: row.CCO_CONCEPTO,
+                    documento: row.DSP_COMPROBA,
+                    clienteProveedor: row.CLI_NOMBRE,
+                    esIngreso: row.DMO_DEBCRE === 1,
+                    cantidad: row.DMO_CANTIDAD,
+                    costoUnitario: costoUnitario,
+                    total: total,
+                    usuario: row.CREA_USR
+                };
             }));
+            return movimientos;
         }
         catch (error) {
             console.error('Error en getMovimientosKardex:', error);
