@@ -57,6 +57,7 @@ const manejarErrorMulter = (err, _req, res, next) => {
 };
 router.get('/listado', comprobantes_controller_1.getListadoComprobantes);
 router.get('/:ccoCodigo/imagenes', comprobantes_controller_1.getImagenesComprobante);
+router.post('/:ccoCodigo/registrar-url', comprobantes_controller_1.postRegistrarUrl);
 router.post('/:ccoCodigo/imagen', (req, res, next) => {
     upload.single('file')(req, res, (err) => {
         if (err)

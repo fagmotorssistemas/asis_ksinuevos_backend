@@ -101,6 +101,52 @@ export const getImagenesComprobante = async (req: Request, res: Response) => {
     }
 };
 
+export const postRegistrarUrl = async (req: Request, res: Response) => {
+    try {
+        const empresa = empresaFromQuery(req);
+        if (isNaN(empresa)) {
+            res.status(400).json({
+                success: false,
+                message: 'Parámetro empresa inválido.',
+                code: 'BAD_REQUEST'
+            });
+            return;
+        }
+        const ccoCodigo = parseInt(req.params.ccoCodigo, 10);
+        if (isNaN(ccoCodigo)) {
+            res.status(400).json({
+                success: false,
+                message: 'ccoCodigo debe ser numérico.',
+                code: 'BAD_REQUEST'
+            });
+            return;
+        }
+        const { url, creaUsr: bodyUsr } = req.body || {};
+        if (!url || typeof url !== 'string' || !url.startsWith('http')) {
+            res.status(400).json({
+                success: false,
+                message: 'Debe enviar una URL válida en el body JSON ({ url: "https://..." }).',
+                code: 'URL_REQUIRED'
+            });
+            return;
+        }
+        const creaUsr =
+            (typeof bodyUsr === 'string' && bodyUsr.trim()) ||
+            (typeof req.headers['x-usuario'] === 'string' && req.headers['x-usuario'].trim()) ||
+            'API_USR';
+
+        const imagen = await service.registrarUrl(empresa, ccoCodigo, url, creaUsr);
+        res.status(201).json({ success: true, data: { imagen } });
+    } catch (error: any) {
+        if (error.code === 'COMPROBANTE_NOT_FOUND') {
+            res.status(404).json({ success: false, message: error.message, code: error.code });
+            return;
+        }
+        const mapped = mapOracleError(error);
+        res.status(mapped.status).json({ success: false, message: mapped.message, code: mapped.code });
+    }
+};
+
 export const postSubirImagenComprobante = async (req: Request, res: Response) => {
     try {
         const empresa = empresaFromQuery(req);

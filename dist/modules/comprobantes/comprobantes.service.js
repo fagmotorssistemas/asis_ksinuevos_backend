@@ -116,5 +116,23 @@ class ComprobantesService {
         };
         return { imagen, storagePath: objectPath, publicUrl };
     }
+    async registrarUrl(empresa, ccoCodigo, url, creaUsr) {
+        const existe = await this.repository.existeComprobante(empresa, ccoCodigo);
+        if (!existe) {
+            const err = new Error('Comprobante no encontrado; no se puede registrar el adjunto.');
+            err.code = 'COMPROBANTE_NOT_FOUND';
+            throw err;
+        }
+        const secuencia = await this.repository.siguienteSecuencia(empresa, ccoCodigo);
+        await this.repository.insertarImagen(empresa, ccoCodigo, secuencia, url, creaUsr);
+        return {
+            ccoEmpresa: empresa,
+            ccoCodigo,
+            ccoSecuencia: secuencia,
+            ccoUrl: url,
+            creaUsr,
+            creaFecha: new Date().toISOString()
+        };
+    }
 }
 exports.ComprobantesService = ComprobantesService;

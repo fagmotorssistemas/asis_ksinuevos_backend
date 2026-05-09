@@ -3,7 +3,8 @@ import multer from 'multer';
 import {
     getImagenesComprobante,
     getListadoComprobantes,
-    postSubirImagenComprobante
+    postSubirImagenComprobante,
+    postRegistrarUrl
 } from './comprobantes.controller';
 
 const router = Router();
@@ -60,6 +61,7 @@ const manejarErrorMulter = (err: unknown, _req: any, res: any, next: any) => {
 
 router.get('/listado', getListadoComprobantes);
 router.get('/:ccoCodigo/imagenes', getImagenesComprobante);
+router.post('/:ccoCodigo/registrar-url', postRegistrarUrl);
 router.post(
     '/:ccoCodigo/imagen',
     (req, res, next) => {
