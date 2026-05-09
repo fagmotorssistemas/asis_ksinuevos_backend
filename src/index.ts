@@ -1,3 +1,21 @@
+// =============================================================
+// POLYFILL — debe ser lo PRIMERO antes de cualquier import
+// Requerido porque el servidor corre Node.js 16 y
+// @supabase/supabase-js v2 necesita fetch/Headers globales (Node 18+).
+// =============================================================
+/* eslint-disable @typescript-eslint/no-var-requires */
+const _nodeFetch = require('node-fetch');
+if (!globalThis.fetch) {
+    Object.assign(globalThis, {
+        fetch: _nodeFetch.default ?? _nodeFetch,
+        Headers: _nodeFetch.Headers,
+        Request: _nodeFetch.Request,
+        Response: _nodeFetch.Response,
+    });
+}
+/* eslint-enable @typescript-eslint/no-var-requires */
+// =============================================================
+
 import 'dotenv/config';
 import 'express-async-errors';
 import express, { Request, Response } from 'express';
@@ -37,17 +55,17 @@ app.get('/api/test-db', testDatabaseConnection);
 app.get('/api/list-views', listViews);
 
 // --- REGISTRO DE RUTAS PRINCIPALES ---
-app.use('/api/cartera', carteraRoutes);     // Módulo original (si aún se usa)
-app.use('/api/tesoreria', tesoreriaRoutes); // Bancos y saldos
-app.use('/api/empleados', empleadosRoutes); // RRHH
-app.use('/api/ventas', ventasRoutes);       // Vehículos vendidos
-app.use('/api/finanzas', finanzasRoutes);   // Balance contable
-app.use('/api/cobros', cobrosRoutes);       // Recaudación (Vista ksi_cobros_v)
-app.use('/api/contratos', contratosRoutes); // Contratos y Amortización
-app.use('/api/pagos', pagosRoutes);         // Pagos realizados
-app.use('/api/inventario', inventarioRoutes); // Inventario de vehículos
-app.use('/api/inventario', carteraRoutes); // Inventario numerodeventa fisico
-app.use('/api/comprobantes', comprobantesRoutes); // Listado y adjuntos (Supabase + Oracle)
+app.use('/api/cartera', carteraRoutes);
+app.use('/api/tesoreria', tesoreriaRoutes);
+app.use('/api/empleados', empleadosRoutes);
+app.use('/api/ventas', ventasRoutes);
+app.use('/api/finanzas', finanzasRoutes);
+app.use('/api/cobros', cobrosRoutes);
+app.use('/api/contratos', contratosRoutes);
+app.use('/api/pagos', pagosRoutes);
+app.use('/api/inventario', inventarioRoutes);
+app.use('/api/inventario', carteraRoutes);
+app.use('/api/comprobantes', comprobantesRoutes);
 // --- FIN REGISTRO DE RUTAS ---
 
 app.use(
@@ -67,30 +85,29 @@ const startServer = async () => {
         const server = app.listen(PORT, () => {
             console.log(`🚀 Servidor corriendo con éxito en http://localhost:${PORT}`);
             console.log('---------------------------------------------------------');
-            console.log(`📊 Cartera KPI:      http://localhost:${PORT}/api/cartera/kpi`);
+            console.log(`📊 Cartera KPI:      http://localhost:${PORT}/api/cartera/kpi`);
             console.log(`🧾 Cartera Doc Fis:  http://localhost:${PORT}/api/cartera/documento/fisico`);
-            console.log(`💰 Tesorería Dash:   http://localhost:${PORT}/api/tesoreria/dashboard`);
-            console.log(`👥 Empleados Dash:   http://localhost:${PORT}/api/empleados/dashboard`);
-            console.log(`🚗 Ventas Dash:      http://localhost:${PORT}/api/ventas/dashboard`);
-            console.log(`📈 Finanzas Dash:    http://localhost:${PORT}/api/finanzas/dashboard`);
-            console.log(`📋 Cobros Dash:      http://localhost:${PORT}/api/cobros/dashboard`);
+            console.log(`💰 Tesorería Dash:   http://localhost:${PORT}/api/tesoreria/dashboard`);
+            console.log(`👥 Empleados Dash:   http://localhost:${PORT}/api/empleados/dashboard`);
+            console.log(`🚗 Ventas Dash:      http://localhost:${PORT}/api/ventas/dashboard`);
+            console.log(`📈 Finanzas Dash:    http://localhost:${PORT}/api/finanzas/dashboard`);
+            console.log(`📋 Cobros Dash:      http://localhost:${PORT}/api/cobros/dashboard`);
             console.log('--- Módulo Contratos ---');
-            console.log(`📑 Lista General:    http://localhost:${PORT}/api/contratos/list`);
-            console.log(`🔍 Detalle (Ej):     http://localhost:${PORT}/api/contratos/detalle/100000000000000000000000883`); // ID de prueba real
-            console.log(`🧾 Amortiz (Ej):     http://localhost:${PORT}/api/contratos/amortizacion/100000000000000000000000883`);
-            console.log(`📊 Pagos Dash:       http://localhost:${PORT}/api/pagos/dashboard`);
+            console.log(`📑 Lista General:    http://localhost:${PORT}/api/contratos/list`);
+            console.log(`🔍 Detalle (Ej):     http://localhost:${PORT}/api/contratos/detalle/100000000000000000000000883`);
+            console.log(`🧾 Amortiz (Ej):     http://localhost:${PORT}/api/contratos/amortizacion/100000000000000000000000883`);
+            console.log(`📊 Pagos Dash:       http://localhost:${PORT}/api/pagos/dashboard`);
             console.log('--- Módulo Inventario ---');
             console.log(`🚙 Inventario Dash:  http://localhost:${PORT}/api/inventario/dashboard`);
-            console.log(`📜 Historial (Ej):   http://localhost:${PORT}/api/inventario/detalle/UBX0763`);
+            console.log(`📜 Historial (Ej):   http://localhost:${PORT}/api/inventario/detalle/UBX0763`);
             console.log('--- Módulo Comprobantes ---');
-            console.log(`🧾 Listado:          http://localhost:${PORT}/api/comprobantes/listado`);
-            console.log(`📎 Subir imagen:     POST http://localhost:${PORT}/api/comprobantes/:ccoCodigo/imagen`);
+            console.log(`🧾 Listado:          http://localhost:${PORT}/api/comprobantes/listado`);
+            console.log(`📎 Subir imagen:     POST http://localhost:${PORT}/api/comprobantes/:ccoCodigo/imagen`);
             console.log('---------------------------------------------------------');
         });
 
-        // Manejo de cierre graceful
         const gracefulShutdown = async (signal: string) => {
-            console.log(`\n⚠️  Señal ${signal} recibida. Cerrando servidor...`);
+            console.log(`\n⚠️  Señal ${signal} recibida. Cerrando servidor...`);
 
             server.close(async () => {
                 console.log('🔒 Servidor HTTP cerrado');
@@ -105,7 +122,6 @@ const startServer = async () => {
                 }
             });
 
-            // Timeout de seguridad
             setTimeout(() => {
                 console.error('⏰ Timeout: Forzando cierre del servidor');
                 process.exit(1);
