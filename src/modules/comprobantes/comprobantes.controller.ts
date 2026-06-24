@@ -11,6 +11,12 @@ const empresaFromQuery = (req: Request): number => {
     return parseInt(q, 10);
 };
 
+const ccoCodigoFromParams = (raw: string | undefined): string | null => {
+    const t = raw?.trim();
+    if (!t || !/^\d+$/.test(t)) return null;
+    return t;
+};
+
 const mapOracleError = (e: any): { status: number; message: string; code?: string } => {
     const code = e?.errorNum || e?.code;
     const msg = e?.message || String(e);
@@ -72,11 +78,11 @@ export const getImagenesComprobante = async (req: Request, res: Response) => {
             });
             return;
         }
-        const ccoCodigo = parseInt(req.params.ccoCodigo, 10);
-        if (isNaN(ccoCodigo)) {
+        const ccoCodigo = ccoCodigoFromParams(req.params.ccoCodigo);
+        if (!ccoCodigo) {
             res.status(400).json({
                 success: false,
-                message: 'ccoCodigo debe ser numérico.',
+                message: 'ccoCodigo debe ser un identificador numérico válido.',
                 code: 'BAD_REQUEST'
             });
             return;
@@ -112,11 +118,11 @@ export const postRegistrarUrl = async (req: Request, res: Response) => {
             });
             return;
         }
-        const ccoCodigo = parseInt(req.params.ccoCodigo, 10);
-        if (isNaN(ccoCodigo)) {
+        const ccoCodigo = ccoCodigoFromParams(req.params.ccoCodigo);
+        if (!ccoCodigo) {
             res.status(400).json({
                 success: false,
-                message: 'ccoCodigo debe ser numérico.',
+                message: 'ccoCodigo debe ser un identificador numérico válido.',
                 code: 'BAD_REQUEST'
             });
             return;
@@ -158,11 +164,11 @@ export const postSubirImagenComprobante = async (req: Request, res: Response) =>
             });
             return;
         }
-        const ccoCodigo = parseInt(req.params.ccoCodigo, 10);
-        if (isNaN(ccoCodigo)) {
+        const ccoCodigo = ccoCodigoFromParams(req.params.ccoCodigo);
+        if (!ccoCodigo) {
             res.status(400).json({
                 success: false,
-                message: 'ccoCodigo debe ser numérico.',
+                message: 'ccoCodigo debe ser un identificador numérico válido.',
                 code: 'BAD_REQUEST'
             });
             return;

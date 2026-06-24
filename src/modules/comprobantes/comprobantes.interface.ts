@@ -1,7 +1,7 @@
 /** Fila de CCOMPROBA_IMAGEN expuesta al cliente */
 export interface ComprobanteImagen {
     ccoEmpresa: number;
-    ccoCodigo: number;
+    ccoCodigo: string;
     ccoSecuencia: number;
     ccoUrl: string;
     creaUsr?: string | null;

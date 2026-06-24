@@ -34,7 +34,7 @@ export class ComprobantesService {
         return this.repository.listarComprobantesPorEmpresa(emp);
     }
 
-    async listarImagenes(empresa: number, ccoCodigo: number): Promise<ComprobanteImagen[]> {
+    async listarImagenes(empresa: number, ccoCodigo: string): Promise<ComprobanteImagen[]> {
         const existe = await this.repository.existeComprobante(empresa, ccoCodigo);
         if (!existe) {
             const err = new Error('Comprobante no encontrado para la empresa indicada.');
@@ -46,7 +46,7 @@ export class ComprobantesService {
 
     async subirImagenYRegistrar(
         empresa: number,
-        ccoCodigo: number,
+        ccoCodigo: string,
         buffer: Buffer,
         mimeType: string,
         nombreOriginal: string,
@@ -143,7 +143,7 @@ export class ComprobantesService {
 
     async registrarUrl(
         empresa: number,
-        ccoCodigo: number,
+        ccoCodigo: string,
         url: string,
         creaUsr: string
     ): Promise<ComprobanteImagen> {

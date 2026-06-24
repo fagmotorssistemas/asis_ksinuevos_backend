@@ -74,12 +74,25 @@ export class ComprobantesRepository {
         const view = listComprobaView();
         try {
             connection = await getConnection();
-            const sql = `SELECT * FROM ${view} L WHERE L.CCO_EMPRESA = :empresa`;
+            const sql = `
+                SELECT L.*, TO_CHAR(L.CCO_CODIGO) AS CCO_CODIGO_STR
+                FROM ${view} L
+                WHERE L.CCO_EMPRESA = :empresa
+            `;
             const result: any = await connection.execute(sql, [empresa], {
                 outFormat: oracledb.OUT_FORMAT_OBJECT
             });
             const rows = result.rows || [];
-            return rows.map((row: Record<string, unknown>) => mapRowKeysToCamel(row));
+            return rows.map((row: Record<string, unknown>) => {
+                const mapped = mapRowKeysToCamel(row);
+                if (row.CCO_CODIGO_STR != null) {
+                    mapped.ccoCodigo = String(row.CCO_CODIGO_STR);
+                } else if (mapped.ccoCodigo != null) {
+                    mapped.ccoCodigo = String(mapped.ccoCodigo);
+                }
+                delete mapped.ccoCodigoStr;
+                return mapped;
+            });
         } catch (error) {
             console.error('ComprobantesRepository.listarComprobantesPorEmpresa:', error);
             throw error;
@@ -88,7 +101,7 @@ export class ComprobantesRepository {
         }
     }
 
-    async existeComprobante(empresa: number, ccoCodigo: number): Promise<boolean> {
+    async existeComprobante(empresa: number, ccoCodigo: string): Promise<boolean> {
         let connection;
         const view = listComprobaView();
         try {
@@ -113,7 +126,7 @@ export class ComprobantesRepository {
         }
     }
 
-    async listarImagenes(empresa: number, ccoCodigo: number): Promise<ComprobanteImagen[]> {
+    async listarImagenes(empresa: number, ccoCodigo: string): Promise<ComprobanteImagen[]> {
         let connection;
         const table = imagenTable();
         try {
@@ -121,7 +134,7 @@ export class ComprobantesRepository {
             const sql = `
                 SELECT
                     CCO_EMPRESA,
-                    CCO_CODIGO,
+                    TO_CHAR(CCO_CODIGO) AS CCO_CODIGO_STR,
                     CCO_SECUENCIA,
                     CCO_URL,
                     CREA_USR,
@@ -140,7 +153,7 @@ export class ComprobantesRepository {
             const rows = result.rows || [];
             return rows.map((row: any) => ({
                 ccoEmpresa: row.CCO_EMPRESA,
-                ccoCodigo: row.CCO_CODIGO,
+                ccoCodigo: String(row.CCO_CODIGO_STR ?? row.CCO_CODIGO),
                 ccoSecuencia: row.CCO_SECUENCIA,
                 ccoUrl: row.CCO_URL,
                 creaUsr: row.CREA_USR,
@@ -156,7 +169,7 @@ export class ComprobantesRepository {
         }
     }
 
-    async siguienteSecuencia(empresa: number, ccoCodigo: number): Promise<number> {
+    async siguienteSecuencia(empresa: number, ccoCodigo: string): Promise<number> {
         let connection;
         const table = imagenTable();
         try {
@@ -183,7 +196,7 @@ export class ComprobantesRepository {
 
     async insertarImagen(
         empresa: number,
-        ccoCodigo: number,
+        ccoCodigo: string,
         secuencia: number,
         url: string,
         creaUsr: string
