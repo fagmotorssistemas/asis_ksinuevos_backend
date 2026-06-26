@@ -18,6 +18,18 @@ const sanitizeNombreArchivo = (name: string): string => {
     return base.length > 180 ? base.slice(-180) : base || 'archivo';
 };
 
+const storagePathFromPublicUrl = (url: string, bucket: string): string | null => {
+    try {
+        const u = new URL(url);
+        const marker = `/storage/v1/object/public/${bucket}/`;
+        const idx = u.pathname.indexOf(marker);
+        if (idx === -1) return null;
+        return decodeURIComponent(u.pathname.slice(idx + marker.length));
+    } catch {
+        return null;
+    }
+};
+
 export class ComprobantesService {
     private repository: ComprobantesRepository;
 
@@ -163,5 +175,47 @@ export class ComprobantesService {
             creaUsr,
             creaFecha: new Date().toISOString()
         };
+    }
+
+    async eliminarImagen(
+        empresa: number,
+        ccoCodigo: string,
+        secuencia: number
+    ): Promise<ComprobanteImagen> {
+        const imagen = await this.repository.obtenerImagenPorSecuencia(empresa, ccoCodigo, secuencia);
+        if (!imagen) {
+            const err = new Error('Adjunto no encontrado para el comprobante indicado.');
+            (err as any).code = 'ADJUNTO_NOT_FOUND';
+            throw err;
+        }
+
+        const eliminado = await this.repository.eliminarImagen(empresa, ccoCodigo, secuencia);
+        if (!eliminado) {
+            const err = new Error('No se pudo eliminar el adjunto en Oracle.');
+            (err as any).code = 'ADJUNTO_NOT_FOUND';
+            throw err;
+        }
+
+        const objectPath = storagePathFromPublicUrl(imagen.ccoUrl, getComprobantesBucketId());
+        if (objectPath) {
+            try {
+                const supabase = getSupabaseAdmin();
+                const bucket = getComprobantesBucketId();
+                const { error } = await supabase.storage.from(bucket).remove([objectPath]);
+                if (error) {
+                    console.warn(
+                        `ComprobantesService.eliminarImagen: no se pudo borrar ${objectPath} en Supabase:`,
+                        error.message
+                    );
+                }
+            } catch (e: any) {
+                console.warn(
+                    'ComprobantesService.eliminarImagen: error al limpiar archivo en Supabase:',
+                    e?.message || e
+                );
+            }
+        }
+
+        return imagen;
     }
 }

@@ -241,6 +241,80 @@ export class ComprobantesRepository {
         }
     }
 
+    async obtenerImagenPorSecuencia(
+        empresa: number,
+        ccoCodigo: string,
+        secuencia: number
+    ): Promise<ComprobanteImagen | null> {
+        let connection;
+        const table = imagenTable();
+        try {
+            connection = await getConnection();
+            const sql = `
+                SELECT
+                    CCO_EMPRESA,
+                    TO_CHAR(CCO_CODIGO) AS CCO_CODIGO_STR,
+                    CCO_SECUENCIA,
+                    CCO_URL,
+                    CREA_USR,
+                    CREA_FECHA,
+                    MOD_USR,
+                    MOD_FECHA
+                FROM ${table}
+                WHERE CCO_EMPRESA = :empresa
+                  AND CCO_CODIGO = :codigo
+                  AND CCO_SECUENCIA = :secuencia
+            `;
+            const result: any = await connection.execute(
+                sql,
+                { empresa, codigo: ccoCodigo, secuencia },
+                { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            );
+            const row = result.rows?.[0];
+            if (!row) return null;
+            return {
+                ccoEmpresa: row.CCO_EMPRESA,
+                ccoCodigo: String(row.CCO_CODIGO_STR ?? row.CCO_CODIGO),
+                ccoSecuencia: row.CCO_SECUENCIA,
+                ccoUrl: row.CCO_URL,
+                creaUsr: row.CREA_USR,
+                creaFecha: parseOracleDate(row.CREA_FECHA) || undefined,
+                modUsr: row.MOD_USR,
+                modFecha: parseOracleDate(row.MOD_FECHA) || undefined
+            };
+        } catch (error) {
+            console.error('ComprobantesRepository.obtenerImagenPorSecuencia:', error);
+            throw error;
+        } finally {
+            if (connection) await connection.close();
+        }
+    }
+
+    async eliminarImagen(empresa: number, ccoCodigo: string, secuencia: number): Promise<boolean> {
+        let connection;
+        const table = imagenTable();
+        try {
+            connection = await getConnection();
+            const sql = `
+                DELETE FROM ${table}
+                WHERE CCO_EMPRESA = :empresa
+                  AND CCO_CODIGO = :codigo
+                  AND CCO_SECUENCIA = :secuencia
+            `;
+            const result = await connection.execute(
+                sql,
+                { empresa, codigo: ccoCodigo, secuencia },
+                { autoCommit: true }
+            );
+            return (result.rowsAffected ?? 0) > 0;
+        } catch (error) {
+            console.error('ComprobantesRepository.eliminarImagen:', error);
+            throw error;
+        } finally {
+            if (connection) await connection.close();
+        }
+    }
+
     getDefaultEmpresa(): number {
         return defaultEmpresa();
     }

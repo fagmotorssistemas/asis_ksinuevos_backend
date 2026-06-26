@@ -17,6 +17,13 @@ const ccoCodigoFromParams = (raw: string | undefined): string | null => {
     return t;
 };
 
+const ccoSecuenciaFromParams = (raw: string | undefined): number | null => {
+    const t = raw?.trim();
+    if (!t || !/^\d+$/.test(t)) return null;
+    const n = parseInt(t, 10);
+    return n > 0 ? n : null;
+};
+
 const mapOracleError = (e: any): { status: number; message: string; code?: string } => {
     const code = e?.errorNum || e?.code;
     const msg = e?.message || String(e);
@@ -229,6 +236,56 @@ export const postSubirImagenComprobante = async (req: Request, res: Response) =>
         }
         if (error.code === 'STORAGE_UPLOAD_FAILED' || error.code === 'STORAGE_PUBLIC_URL') {
             res.status(502).json({
+                success: false,
+                message: error.message,
+                code: error.code
+            });
+            return;
+        }
+        const mapped = mapOracleError(error);
+        res.status(mapped.status).json({
+            success: false,
+            message: mapped.message,
+            code: mapped.code
+        });
+    }
+};
+
+export const deleteImagenComprobante = async (req: Request, res: Response) => {
+    try {
+        const empresa = empresaFromQuery(req);
+        if (isNaN(empresa)) {
+            res.status(400).json({
+                success: false,
+                message: 'Parámetro empresa inválido.',
+                code: 'BAD_REQUEST'
+            });
+            return;
+        }
+        const ccoCodigo = ccoCodigoFromParams(req.params.ccoCodigo);
+        if (!ccoCodigo) {
+            res.status(400).json({
+                success: false,
+                message: 'ccoCodigo debe ser un identificador numérico válido.',
+                code: 'BAD_REQUEST'
+            });
+            return;
+        }
+        const ccoSecuencia = ccoSecuenciaFromParams(req.params.ccoSecuencia);
+        if (!ccoSecuencia) {
+            res.status(400).json({
+                success: false,
+                message: 'ccoSecuencia debe ser un número entero positivo.',
+                code: 'BAD_REQUEST'
+            });
+            return;
+        }
+
+        const imagen = await service.eliminarImagen(empresa, ccoCodigo, ccoSecuencia);
+        res.json({ success: true, data: { imagen } });
+    } catch (error: any) {
+        if (error.code === 'ADJUNTO_NOT_FOUND') {
+            res.status(404).json({
                 success: false,
                 message: error.message,
                 code: error.code

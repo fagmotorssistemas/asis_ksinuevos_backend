@@ -103,6 +103,7 @@ const startServer = async () => {
             console.log('--- Módulo Comprobantes ---');
             console.log(`🧾 Listado:          http://localhost:${PORT}/api/comprobantes/listado`);
             console.log(`📎 Subir imagen:     POST http://localhost:${PORT}/api/comprobantes/:ccoCodigo/imagen`);
+            console.log(`🗑️  Borrar adjunto:   DELETE http://localhost:${PORT}/api/comprobantes/:ccoCodigo/imagenes/:ccoSecuencia`);
             console.log('---------------------------------------------------------');
         });
 

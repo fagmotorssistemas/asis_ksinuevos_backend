@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import {
+    deleteImagenComprobante,
     getImagenesComprobante,
     getListadoComprobantes,
     postSubirImagenComprobante,
@@ -61,6 +62,7 @@ const manejarErrorMulter = (err: unknown, _req: any, res: any, next: any) => {
 
 router.get('/listado', getListadoComprobantes);
 router.get('/:ccoCodigo/imagenes', getImagenesComprobante);
+router.delete('/:ccoCodigo/imagenes/:ccoSecuencia', deleteImagenComprobante);
 router.post('/:ccoCodigo/registrar-url', postRegistrarUrl);
 router.post(
     '/:ccoCodigo/imagen',
