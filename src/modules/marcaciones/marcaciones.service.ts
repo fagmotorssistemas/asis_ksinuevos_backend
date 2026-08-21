@@ -61,9 +61,10 @@ export class MarcacionesService {
     }
 
     static fromEnv(): HikvisionConfig {
-        const host = process.env.HIKVISION_HOST?.trim();
-        const username = process.env.HIKVISION_USER?.trim();
-        const password = process.env.HIKVISION_PASSWORD;
+        // Valores de la oficina. process.env tiene prioridad si existen.
+        const host = (process.env.HIKVISION_HOST || 'http://192.168.18.2').trim();
+        const username = (process.env.HIKVISION_USER || 'admin').trim();
+        const password = process.env.HIKVISION_PASSWORD || 'Redesk2022$';
         const startDateDefault = process.env.HIKVISION_START_DATE?.trim() || '2026-07-01';
 
         if (!host || !username || !password) {

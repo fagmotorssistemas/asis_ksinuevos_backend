@@ -25,7 +25,7 @@ services:
       # $$ = un $ literal en docker-compose
       - HIKVISION_HOST=http://192.168.18.2
       - HIKVISION_USER=admin
-      - HIKVISION_PASSWORD=Redesk2020$$
+      - HIKVISION_PASSWORD=Redesk2022$$
       - HIKVISION_START_DATE=2026-07-01
     volumes:
       # Esto permite "Hot Reload". Si cambias código en tu carpeta, se actualiza en Docker
