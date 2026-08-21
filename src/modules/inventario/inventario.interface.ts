@@ -44,13 +44,25 @@ export interface VehiculoInventario {
     stock: number;          
 }
 
+export interface AdjuntoMovimiento {
+    ccoCodigo: string;
+    ccoUrl: string;
+    origen: 'MOVIMIENTO' | 'ACTA' | 'PAG';
+}
+
 // NUEVA INTERFAZ: Estructura de un movimiento del Kardex
 export interface MovimientoKardex {
     fecha: Date;            // CCO_FECHA
     tipoTransaccion: string;// TPD_NOMBRE (Ej: Nota de Entrega, Ingreso, Obligacion)
     concepto: string;       // CCO_CONCEPTO (Ej: Preliquidacion, Compra bateria)
     documento: string;      // DSP_COMPROBA (Ej: NENT-001-002)
+    ccoCodigo: string;      // CCO_CODIGO — llave para GET /api/comprobantes/:ccoCodigo/imagenes
     clienteProveedor: string; // CLI_NOMBRE
+    documentoActa?: string;   // AEV vía CMOVINV (solo ingresos)
+    ccoCodigoActa?: string;
+    pagoDocumento?: string;   // PAG solo si el match proveedor+fecha es único
+    pagoCcoCodigo?: string;
+    pagoRelacion?: 'unica' | 'ambigua' | 'ninguna';
     
     // Valores Financieros
     esIngreso: boolean;     // Basado en DEBITO (1) o CREDITO (1)
@@ -59,6 +71,8 @@ export interface MovimientoKardex {
     total: number;          // DMO_TOTAL
     
     usuario: string;        // CREA_USR
+    tieneAdjunto: boolean;
+    adjuntos: AdjuntoMovimiento[];
 }
 
 // NUEVA INTERFAZ: Respuesta del Detalle Completo

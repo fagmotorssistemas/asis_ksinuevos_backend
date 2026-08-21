@@ -1,6 +1,6 @@
 import oracledb from 'oracledb';
 import { getConnection } from '../../config/oracle';
-import { VehiculoInventario, MovimientoKardex } from './inventario.interface';
+import { VehiculoInventario, MovimientoKardex, AdjuntoMovimiento } from './inventario.interface';
 
 const CODIGO_EMPRESA = 162;
 
@@ -157,7 +157,11 @@ export class InventarioRepository {
                     DMO_CANTIDAD,
                     DMO_COSTO,
                     DMO_TOTAL,
-                    CREA_USR
+                    CREA_USR,
+                    TO_CHAR(CCO_CODIGO) AS CCO_CODIGO_STR,
+                    DSP_FACTURA,
+                    TO_CHAR(CMO_CCO_FACTURA) AS CMO_FACTURA_STR,
+                    CCO_CODCLIPRO
                 FROM MOVIMIENTOS_PRODUCTO_V_KSI
                 WHERE PLACA = :placa
                 ORDER BY CCO_FECHA DESC, DMO_SECUENCIA DESC
@@ -211,27 +215,133 @@ export class InventarioRepository {
                     }
                 }
 
+                const esIngresoBodega = String(row.TPD_NOMBRE || '').toUpperCase().includes('INGRESO DE BODEGA');
+                const ccoCodigo = row.CCO_CODIGO_STR != null ? String(row.CCO_CODIGO_STR) : '';
+                const ccoCodigoActa = esIngresoBodega && row.CMO_FACTURA_STR
+                    ? String(row.CMO_FACTURA_STR)
+                    : undefined;
+                const documentoActa = esIngresoBodega && row.DSP_FACTURA && String(row.DSP_FACTURA).indexOf('AEV') >= 0
+                    ? String(row.DSP_FACTURA)
+                    : undefined;
+
                 return {
                     fecha: row.CCO_FECHA,
                     tipoTransaccion: row.TPD_NOMBRE,
                     concepto: row.CCO_CONCEPTO,
                     documento: row.DSP_COMPROBA,
+                    ccoCodigo,
                     clienteProveedor: row.CLI_NOMBRE,
+                    documentoActa,
+                    ccoCodigoActa,
+                    pagoRelacion: 'ninguna' as const,
                     esIngreso: row.DMO_DEBCRE === 1,
                     cantidad: row.DMO_CANTIDAD,
                     costoUnitario: costoUnitario,
                     total: total,
-                    usuario: row.CREA_USR
+                    usuario: row.CREA_USR,
+                    tieneAdjunto: false,
+                    adjuntos: [],
+                    _codclipro: row.CCO_CODCLIPRO
                 };
             }));
 
-            return movimientos;
+            await this.enrichAdjuntosKardex(connection, movimientos);
+            return movimientos.map(({ _codclipro, ...mov }: any) => mov);
 
         } catch (error) {
             console.error('Error en getMovimientosKardex:', error);
             throw error;
         } finally {
             if (connection) try { await connection.close(); } catch (e) {}
+        }
+    }
+
+    /**
+     * Adjuntos del propio movimiento (ING/NT/OBL) + acta AEV.
+     * PAG solo si hay exactamente un pago del mismo proveedor el mismo día.
+     */
+    private async enrichAdjuntosKardex(connection: oracledb.Connection, movimientos: any[]): Promise<void> {
+        const imagenTable = (process.env.ORACLE_CCOMPROBA_IMAGEN_TABLE || 'CCOMPROBA_IMAGEN').trim();
+        const codigos = new Set<string>();
+        for (const mov of movimientos) {
+            if (mov.ccoCodigo) codigos.add(mov.ccoCodigo);
+            if (mov.ccoCodigoActa) codigos.add(mov.ccoCodigoActa);
+        }
+
+        const ingresos = movimientos.filter((m) =>
+            String(m.tipoTransaccion || '').toUpperCase().includes('INGRESO DE BODEGA') && m._codclipro != null && m.fecha
+        );
+
+        for (const ing of ingresos) {
+            try {
+                const rPag: any = await connection.execute(
+                    `SELECT DSP_COMPROBA, TO_CHAR(CCO_CODIGO) AS CCO_CODIGO_STR
+                     FROM LIST_CCOMPROBA_V
+                     WHERE CCO_EMPRESA = :empresa
+                       AND DSP_COMPROBA LIKE 'PAG%'
+                       AND CCO_CODCLIPRO = :prov
+                       AND TRUNC(CCO_FECHA) = TRUNC(:fecha)
+                     ORDER BY CCO_CODIGO`,
+                    { empresa: CODIGO_EMPRESA, prov: ing._codclipro, fecha: ing.fecha },
+                    { outFormat: oracledb.OUT_FORMAT_OBJECT }
+                );
+                const pags = rPag.rows || [];
+                if (pags.length === 1) {
+                    ing.pagoRelacion = 'unica';
+                    ing.pagoDocumento = pags[0].DSP_COMPROBA;
+                    ing.pagoCcoCodigo = String(pags[0].CCO_CODIGO_STR);
+                    if (ing.pagoCcoCodigo) codigos.add(ing.pagoCcoCodigo);
+                } else if (pags.length > 1) {
+                    ing.pagoRelacion = 'ambigua';
+                } else {
+                    ing.pagoRelacion = 'ninguna';
+                }
+            } catch (e) {
+                console.warn('No se pudo cruzar PAG único para ingreso de inventario:', e);
+            }
+        }
+
+        const urlsByCodigo = new Map<string, { ccoUrl: string }[]>();
+        const lista = Array.from(codigos);
+        if (lista.length > 0) {
+            const binds: Record<string, string> = {};
+            const placeholders = lista.map((c, i) => {
+                binds[`c${i}`] = c;
+                return `:c${i}`;
+            }).join(', ');
+            const rImg: any = await connection.execute(
+                `SELECT TO_CHAR(CCO_CODIGO) AS CCO_CODIGO_STR, CCO_URL
+                 FROM ${imagenTable}
+                 WHERE CCO_EMPRESA = :empresa AND CCO_CODIGO IN (${placeholders})
+                 ORDER BY CCO_SECUENCIA`,
+                { empresa: CODIGO_EMPRESA, ...binds },
+                { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            );
+            for (const row of rImg.rows || []) {
+                const codigo = String(row.CCO_CODIGO_STR);
+                const arr = urlsByCodigo.get(codigo) || [];
+                arr.push({ ccoUrl: row.CCO_URL });
+                urlsByCodigo.set(codigo, arr);
+            }
+        }
+
+        const pushAdj = (mov: any, codigo: string | undefined, origen: AdjuntoMovimiento['origen']) => {
+            if (!codigo) return;
+            for (const img of urlsByCodigo.get(codigo) || []) {
+                mov.adjuntos.push({ ccoCodigo: codigo, ccoUrl: img.ccoUrl, origen });
+            }
+        };
+
+        for (const mov of movimientos) {
+            mov.adjuntos = [];
+            pushAdj(mov, mov.ccoCodigo, 'MOVIMIENTO');
+            if (String(mov.tipoTransaccion || '').toUpperCase().includes('INGRESO DE BODEGA')) {
+                pushAdj(mov, mov.ccoCodigoActa, 'ACTA');
+                if (mov.pagoRelacion === 'unica') {
+                    pushAdj(mov, mov.pagoCcoCodigo, 'PAG');
+                }
+            }
+            mov.tieneAdjunto = mov.adjuntos.length > 0;
         }
     }
 }

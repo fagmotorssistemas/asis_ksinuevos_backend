@@ -34,6 +34,7 @@ import cobrosRoutes from './modules/cobros/cobros.routes';
 import contratosRoutes from './modules/contratos/contratos.routes';
 import inventarioRoutes from './modules/inventario/inventario.routes';
 import comprobantesRoutes from './modules/comprobantes/comprobantes.routes';
+import marcacionesRoutes from './modules/marcaciones/marcaciones.routes';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -66,6 +67,7 @@ app.use('/api/pagos', pagosRoutes);
 app.use('/api/inventario', inventarioRoutes);
 app.use('/api/inventario', carteraRoutes);
 app.use('/api/comprobantes', comprobantesRoutes);
+app.use('/api/marcaciones', marcacionesRoutes);
 // --- FIN REGISTRO DE RUTAS ---
 
 app.use(
@@ -104,6 +106,8 @@ const startServer = async () => {
             console.log(`🧾 Listado:          http://localhost:${PORT}/api/comprobantes/listado`);
             console.log(`📎 Subir imagen:     POST http://localhost:${PORT}/api/comprobantes/:ccoCodigo/imagen`);
             console.log(`🗑️  Borrar adjunto:   DELETE http://localhost:${PORT}/api/comprobantes/:ccoCodigo/imagenes/:ccoSecuencia`);
+            console.log('--- Módulo Marcaciones ---');
+            console.log(`🕒 Reporte reloj:    http://localhost:${PORT}/api/marcaciones/reporte`);
             console.log('---------------------------------------------------------');
         });
 
