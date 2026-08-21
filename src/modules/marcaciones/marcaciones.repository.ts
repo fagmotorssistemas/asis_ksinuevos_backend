@@ -8,6 +8,9 @@ import {
     UsuarioReloj
 } from './marcaciones.interface';
 
+const MINOR_MARCACIONES = [75, 38, 113, 1];
+const TZ_OFFSET = process.env.HIKVISION_TZ_OFFSET?.trim() || '-05:00';
+
 const asArray = <T>(value: T | T[] | undefined | null): T[] => {
     if (!value) return [];
     return Array.isArray(value) ? value : [value];
@@ -20,36 +23,33 @@ const toStringId = (value: string | number | undefined | null): string => {
 
 const pad = (n: number): string => String(n).padStart(2, '0');
 
-const formatHikvisionDate = (date: Date): string =>
-    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
-    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+const hikDateTime = (yyyyMmDd: string, time: string): string =>
+    `${yyyyMmDd}T${time}${TZ_OFFSET}`;
 
-const parseIsoDateStart = (yyyyMmDd: string): Date => {
-    const [y, m, d] = yyyyMmDd.split('-').map(Number);
-    return new Date(y, m - 1, d, 0, 0, 0);
-};
-
-const parseIsoDateEnd = (yyyyMmDd: string): Date => {
-    const [y, m, d] = yyyyMmDd.split('-').map(Number);
-    return new Date(y, m - 1, d, 23, 59, 59);
-};
+const lastDayOfMonth = (year: number, month1to12: number): number =>
+    new Date(year, month1to12, 0).getDate();
 
 const monthRanges = (desde: string, hasta: string): Array<{ start: string; end: string }> => {
-    const start = parseIsoDateStart(desde);
-    const end = parseIsoDateEnd(hasta);
+    const [yFrom, mFrom] = desde.split('-').map(Number);
+    const [yTo, mTo] = hasta.split('-').map(Number);
     const ranges: Array<{ start: string; end: string }> = [];
 
-    let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
-    while (cursor <= end) {
-        const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1, 0, 0, 0);
-        const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0, 23, 59, 59);
-        const from = monthStart < start ? start : monthStart;
-        const to = monthEnd > end ? end : monthEnd;
+    let year = yFrom;
+    let month = mFrom;
+    while (year < yTo || (year === yTo && month <= mTo)) {
+        const monthStart = `${year}-${pad(month)}-01`;
+        const monthEnd = `${year}-${pad(month)}-${pad(lastDayOfMonth(year, month))}`;
+        const from = monthStart < desde ? desde : monthStart;
+        const to = monthEnd > hasta ? hasta : monthEnd;
         ranges.push({
-            start: formatHikvisionDate(from),
-            end: formatHikvisionDate(to)
+            start: hikDateTime(from, '00:00:00'),
+            end: hikDateTime(to, '23:59:59')
         });
-        cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+        month += 1;
+        if (month > 12) {
+            month = 1;
+            year += 1;
+        }
     }
 
     return ranges;
@@ -61,7 +61,7 @@ export class MarcacionesRepository {
 
     constructor(config: HikvisionConfig) {
         this.host = config.host.replace(/\/$/, '');
-        this.client = new HikvisionDigestClient(config.username, config.password);
+        this.client = new HikvisionDigestClient(this.host, config.username, config.password);
     }
 
     async getUsuarios(): Promise<UsuarioReloj[]> {
@@ -74,8 +74,9 @@ export class MarcacionesRepository {
         } catch (error) {
             console.warn('No se pudo leer UserInfo/Count, se paginará igual:', error);
         }
+
         const usuarios: UsuarioReloj[] = [];
-        const searchID = `users-${Date.now()}`;
+        const searchID = `users${Date.now()}`;
         let position = 0;
         const pageSize = 30;
         let guard = 0;
@@ -123,11 +124,10 @@ export class MarcacionesRepository {
         const eventos: EventoReloj[] = [];
         const seen = new Set<string>();
         const ranges = monthRanges(desde, hasta);
-        const extraFilters = await this.resolverFiltroEventos(ranges);
 
-        for (const extra of extraFilters) {
+        for (const minor of MINOR_MARCACIONES) {
             for (const range of ranges) {
-                const page = await this.searchEventosRango(range.start, range.end, extra);
+                const page = await this.searchEventosRango(range.start, range.end, minor);
                 for (const evento of page) {
                     const key = `${evento.serialNo ?? ''}|${evento.time}|${evento.employeeNo}|${evento.minor}`;
                     if (seen.has(key)) continue;
@@ -141,31 +141,12 @@ export class MarcacionesRepository {
         return eventos;
     }
 
-    private async resolverFiltroEventos(
-        ranges: Array<{ start: string; end: string }>
-    ): Promise<Array<Record<string, unknown>>> {
-        const probe = ranges[ranges.length - 1];
-        if (!probe) return [{}];
-
-        try {
-            await this.searchEventosRango(probe.start, probe.end, {}, true);
-            return [{}];
-        } catch (error) {
-            console.warn(
-                'Búsqueda de eventos sin minor falló; se usarán códigos de marcación (rostro/tarjeta/huella):',
-                error
-            );
-            return [{ minor: 75 }, { minor: 38 }, { minor: 113 }, { minor: 1 }];
-        }
-    }
-
     private async searchEventosRango(
         startTime: string,
         endTime: string,
-        extra: Record<string, unknown> = {},
-        soloPrimeraPagina = false
+        minor: number
     ): Promise<EventoReloj[]> {
-        const searchID = `evt-${startTime}-${Date.now()}`;
+        const searchID = `evt${Date.now()}${minor}`;
         const eventos: EventoReloj[] = [];
         let position = 0;
         const pageSize = 30;
@@ -181,9 +162,9 @@ export class MarcacionesRepository {
                         searchResultPosition: position,
                         maxResults: pageSize,
                         major: 5,
+                        minor,
                         startTime,
-                        endTime,
-                        ...extra
+                        endTime
                     }
                 }
             );
@@ -213,13 +194,7 @@ export class MarcacionesRepository {
 
             const got = search?.numOfMatches ?? page.length;
             const status = (search?.responseStatusStrg || '').toUpperCase();
-            if (
-                soloPrimeraPagina ||
-                !got ||
-                status === 'OK' ||
-                status === 'NO MATCH' ||
-                status === 'NO_MATCHES'
-            ) {
+            if (!got || status === 'OK' || status === 'NO MATCH' || status === 'NO_MATCHES') {
                 break;
             }
             position += got;
