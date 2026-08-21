@@ -20,7 +20,9 @@ export const getReporteMarcaciones = async (req: Request, res: Response) => {
     try {
         const desde = queryString(req.query.desde);
         const hasta = queryString(req.query.hasta);
+        const started = Date.now();
         const data = await getService().obtenerReporte(desde, hasta);
+        console.log(`Reporte marcaciones listo en ${Date.now() - started}ms`);
 
         res.json({
             success: true,

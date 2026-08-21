@@ -115,6 +115,7 @@ export interface AcsEventResponse {
         numOfMatches?: number;
         totalMatches?: number;
         Info?: AcsEventInfoRaw | AcsEventInfoRaw[];
+        InfoList?: AcsEventInfoRaw | AcsEventInfoRaw[];
     };
     statusCode?: number;
     statusString?: string;

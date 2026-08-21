@@ -45,7 +45,7 @@ export class HikvisionDigestClient {
         private readonly baseUrl: string,
         private readonly username: string,
         private readonly password: string,
-        private readonly timeoutMs = 20000
+        private readonly timeoutMs = 10000
     ) {}
 
     async get<T = unknown>(url: string): Promise<T> {

@@ -1,15 +1,17 @@
 import { HikvisionDigestClient } from './hikvision.client';
 import {
+    AcsEventInfoRaw,
     AcsEventResponse,
     EventoReloj,
     HikvisionConfig,
-    UserInfoCountResponse,
     UserInfoSearchResponse,
     UsuarioReloj
 } from './marcaciones.interface';
 
-const MINOR_MARCACIONES = [75, 38, 113, 1];
 const TZ_OFFSET = process.env.HIKVISION_TZ_OFFSET?.trim() || '-05:00';
+const MAX_EVENT_PAGES = 150;
+const MAX_USER_PAGES = 20;
+const FALLBACK_MINORS = [0, 1, 21, 22, 38, 75, 113];
 
 const asArray = <T>(value: T | T[] | undefined | null): T[] => {
     if (!value) return [];
@@ -21,43 +23,53 @@ const toStringId = (value: string | number | undefined | null): string => {
     return String(value).trim();
 };
 
-const pad = (n: number): string => String(n).padStart(2, '0');
-
 const hikDateTime = (yyyyMmDd: string, time: string): string =>
     `${yyyyMmDd}T${time}${TZ_OFFSET}`;
 
-const lastDayOfMonth = (year: number, month1to12: number): number =>
-    new Date(year, month1to12, 0).getDate();
+const esErrorDeMinor = (error: unknown): boolean => {
+    const message = error instanceof Error ? error.message : String(error);
+    return /"errorMsg":\s*"minor"|MessageParametersLack[\s\S]*minor|badParameters[\s\S]*minor/i.test(
+        message
+    );
+};
 
-const monthRanges = (desde: string, hasta: string): Array<{ start: string; end: string }> => {
-    const [yFrom, mFrom] = desde.split('-').map(Number);
-    const [yTo, mTo] = hasta.split('-').map(Number);
-    const ranges: Array<{ start: string; end: string }> = [];
+const parseOptNumbers = (json: string, field: string): number[] => {
+    const regex = new RegExp(`"${field}"\\s*:\\s*\\{[^}]*"@opt"\\s*:\\s*"([^"]+)"`);
+    const match = json.match(regex);
+    if (!match?.[1]) return [];
+    return match[1]
+        .split(',')
+        .map((item) => Number(item.trim()))
+        .filter((n) => Number.isFinite(n));
+};
 
-    let year = yFrom;
-    let month = mFrom;
-    while (year < yTo || (year === yTo && month <= mTo)) {
-        const monthStart = `${year}-${pad(month)}-01`;
-        const monthEnd = `${year}-${pad(month)}-${pad(lastDayOfMonth(year, month))}`;
-        const from = monthStart < desde ? desde : monthStart;
-        const to = monthEnd > hasta ? hasta : monthEnd;
-        ranges.push({
-            start: hikDateTime(from, '00:00:00'),
-            end: hikDateTime(to, '23:59:59')
-        });
-        month += 1;
-        if (month > 12) {
-            month = 1;
-            year += 1;
-        }
-    }
+const parseMaxResults = (json: string): number => {
+    const match = json.match(/"maxResults"\s*:\s*\{[^}]*"@max"\s*:\s*(\d+)/);
+    const max = match ? Number(match[1]) : 10;
+    if (!Number.isFinite(max) || max < 1) return 10;
+    return Math.min(max, 30);
+};
 
-    return ranges;
+const eventoDesdeInfo = (info: AcsEventInfoRaw): EventoReloj | null => {
+    const employeeNo = toStringId(info.employeeNoString ?? info.employeeNo);
+    if (!employeeNo && !info.name) return null;
+    return {
+        employeeNo: employeeNo || 'sin-codigo',
+        nombre: info.name?.trim() || employeeNo || 'Sin nombre',
+        time: info.time || '',
+        major: Number(info.major || 0),
+        minor: Number(info.minor || 0),
+        doorNo: info.doorNo,
+        serialNo: info.serialNo,
+        currentVerifyMode: info.currentVerifyMode
+    };
 };
 
 export class MarcacionesRepository {
     private readonly client: HikvisionDigestClient;
     private readonly host: string;
+    private pageSize = 10;
+    private minorsCache: number[] | null = null;
 
     constructor(config: HikvisionConfig) {
         this.host = config.host.replace(/\/$/, '');
@@ -65,40 +77,31 @@ export class MarcacionesRepository {
     }
 
     async getUsuarios(): Promise<UsuarioReloj[]> {
-        let expected = 0;
-        try {
-            const countRes = await this.client.get<UserInfoCountResponse>(
-                `${this.host}/ISAPI/AccessControl/UserInfo/Count?format=json`
-            );
-            expected = countRes.UserInfoCount?.userNumber ?? 0;
-        } catch (error) {
-            console.warn('No se pudo leer UserInfo/Count, se paginará igual:', error);
-        }
-
         const usuarios: UsuarioReloj[] = [];
-        const searchID = `users${Date.now()}`;
+        const seen = new Set<string>();
+        const searchID = `u${Date.now()}`;
         let position = 0;
-        const pageSize = 30;
-        let guard = 0;
 
-        while (guard < 500) {
-            guard += 1;
+        for (let pageNo = 0; pageNo < MAX_USER_PAGES; pageNo += 1) {
             const res = await this.client.post<UserInfoSearchResponse>(
                 `${this.host}/ISAPI/AccessControl/UserInfo/Search?format=json`,
                 {
                     UserInfoSearchCond: {
                         searchID,
                         searchResultPosition: position,
-                        maxResults: pageSize
+                        maxResults: this.pageSize
                     }
                 }
             );
 
             const search = res.UserInfoSearch;
             const page = asArray(search?.UserInfo);
+            let nuevos = 0;
             for (const user of page) {
                 const employeeNo = toStringId(user.employeeNo);
-                if (!employeeNo) continue;
+                if (!employeeNo || seen.has(employeeNo)) continue;
+                seen.add(employeeNo);
+                nuevos += 1;
                 usuarios.push({
                     employeeNo,
                     nombre: user.name?.trim() || employeeNo,
@@ -110,35 +113,82 @@ export class MarcacionesRepository {
 
             const got = search?.numOfMatches ?? page.length;
             const status = (search?.responseStatusStrg || '').toUpperCase();
-            if (!got || status === 'OK' || status === 'NO MATCH' || status === 'NO_MATCHES') {
+            if (
+                !got ||
+                nuevos === 0 ||
+                got < this.pageSize ||
+                status === 'OK' ||
+                status === 'NO MATCH' ||
+                status === 'NO_MATCHES'
+            ) {
                 break;
             }
             position += got;
-            if (expected > 0 && usuarios.length >= expected) break;
         }
 
         return usuarios;
     }
 
     async getEventos(desde: string, hasta: string): Promise<EventoReloj[]> {
-        const eventos: EventoReloj[] = [];
-        const seen = new Set<string>();
-        const ranges = monthRanges(desde, hasta);
+        const startTime = hikDateTime(desde, '00:00:00');
+        const endTime = hikDateTime(hasta, '23:59:59');
+        const minors = await this.resolverMinors();
+        let lastError: unknown;
 
-        for (const minor of MINOR_MARCACIONES) {
-            for (const range of ranges) {
-                const page = await this.searchEventosRango(range.start, range.end, minor);
-                for (const evento of page) {
-                    const key = `${evento.serialNo ?? ''}|${evento.time}|${evento.employeeNo}|${evento.minor}`;
-                    if (seen.has(key)) continue;
-                    seen.add(key);
-                    eventos.push(evento);
-                }
+        for (const minor of minors) {
+            try {
+                const page = await this.searchEventosRango(startTime, endTime, minor);
+                console.log(`AcsEvent OK con minor=${minor} (${page.length} eventos)`);
+                return page;
+            } catch (error) {
+                lastError = error;
+                if (!esErrorDeMinor(error)) throw error;
+                console.warn(`El reloj rechazó minor=${minor}, se prueba el siguiente`);
             }
         }
 
-        eventos.sort((a, b) => a.time.localeCompare(b.time));
-        return eventos;
+        throw lastError instanceof Error
+            ? lastError
+            : new Error('El reloj no aceptó ningún código de marcación (minor)');
+    }
+
+    private async resolverMinors(): Promise<number[]> {
+        if (this.minorsCache) return this.minorsCache;
+
+        const fromEnv = process.env.HIKVISION_MINORS?.trim();
+        if (fromEnv) {
+            const parsed = fromEnv
+                .split(',')
+                .map((item) => Number(item.trim()))
+                .filter((n) => Number.isFinite(n));
+            if (parsed.length) {
+                this.minorsCache = parsed;
+                return parsed;
+            }
+        }
+
+        try {
+            const caps = await this.client.get<unknown>(
+                `${this.host}/ISAPI/AccessControl/AcsEvent/capabilities?format=json`
+            );
+            const json = JSON.stringify(caps);
+            this.pageSize = parseMaxResults(json);
+            const permitidos = parseOptNumbers(json, 'minorEvent');
+            if (permitidos.length) {
+                const preferidos = [0, 1, 21, 22, 38, 75].filter((n) => permitidos.includes(n));
+                this.minorsCache = preferidos.length ? preferidos : permitidos.slice(0, 5);
+                console.log(
+                    `Reloj AcsEvent: maxResults=${this.pageSize}, minors=${this.minorsCache.join(',')}`
+                );
+                return this.minorsCache;
+            }
+        } catch (error) {
+            console.warn('No se leyeron capacidades AcsEvent del reloj:', error);
+        }
+
+        this.minorsCache = FALLBACK_MINORS;
+        this.pageSize = 10;
+        return this.minorsCache;
     }
 
     private async searchEventosRango(
@@ -146,21 +196,19 @@ export class MarcacionesRepository {
         endTime: string,
         minor: number
     ): Promise<EventoReloj[]> {
-        const searchID = `evt${Date.now()}${minor}`;
+        const searchID = `e${Date.now().toString(36)}${minor}`.slice(0, 20);
         const eventos: EventoReloj[] = [];
+        const seen = new Set<string>();
         let position = 0;
-        const pageSize = 30;
-        let guard = 0;
 
-        while (guard < 2000) {
-            guard += 1;
+        for (let pageNo = 0; pageNo < MAX_EVENT_PAGES; pageNo += 1) {
             const res = await this.client.post<AcsEventResponse>(
                 `${this.host}/ISAPI/AccessControl/AcsEvent?format=json`,
                 {
                     AcsEventCond: {
                         searchID,
                         searchResultPosition: position,
-                        maxResults: pageSize,
+                        maxResults: this.pageSize,
                         major: 5,
                         minor,
                         startTime,
@@ -176,25 +224,28 @@ export class MarcacionesRepository {
             }
 
             const search = res.AcsEvent;
-            const page = asArray(search?.Info);
+            const page = asArray(search?.Info ?? search?.InfoList);
+            let nuevos = 0;
             for (const info of page) {
-                const employeeNo = toStringId(info.employeeNoString ?? info.employeeNo);
-                if (!employeeNo && !info.name) continue;
-                eventos.push({
-                    employeeNo: employeeNo || 'sin-codigo',
-                    nombre: info.name?.trim() || employeeNo || 'Sin nombre',
-                    time: info.time || '',
-                    major: Number(info.major || 0),
-                    minor: Number(info.minor || 0),
-                    doorNo: info.doorNo,
-                    serialNo: info.serialNo,
-                    currentVerifyMode: info.currentVerifyMode
-                });
+                const evento = eventoDesdeInfo(info);
+                if (!evento) continue;
+                const key = `${evento.serialNo ?? ''}|${evento.time}|${evento.employeeNo}|${evento.minor}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                nuevos += 1;
+                eventos.push(evento);
             }
 
             const got = search?.numOfMatches ?? page.length;
             const status = (search?.responseStatusStrg || '').toUpperCase();
-            if (!got || status === 'OK' || status === 'NO MATCH' || status === 'NO_MATCHES') {
+            if (
+                !got ||
+                nuevos === 0 ||
+                got < this.pageSize ||
+                status === 'OK' ||
+                status === 'NO MATCH' ||
+                status === 'NO_MATCHES'
+            ) {
                 break;
             }
             position += got;

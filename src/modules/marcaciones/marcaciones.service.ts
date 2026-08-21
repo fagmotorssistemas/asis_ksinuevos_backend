@@ -27,6 +27,7 @@ const metodoDesdeEvento = (evento: EventoReloj): string => {
         case 75:
             return 'rostro';
         case 21:
+        case 22:
         case 113:
             return 'huella';
         default:
@@ -92,8 +93,12 @@ export class MarcacionesService {
 
     async obtenerReporte(desde?: string, hasta?: string): Promise<ReporteMarcaciones> {
         const rango = this.resolverRango(desde, hasta);
-        // Secuencial: el reloj Digest Auth no tolera bien dos llamadas a la vez.
-        const usuarios = await this.repository.getUsuarios();
+        let usuarios: UsuarioReloj[] = [];
+        try {
+            usuarios = await this.repository.getUsuarios();
+        } catch (error) {
+            console.warn('No se pudieron leer usuarios del reloj; se armarán desde las marcaciones:', error);
+        }
         const eventos = await this.repository.getEventos(rango.desde, rango.hasta);
 
         const marcacionesValidas = eventos.filter(
