@@ -11,8 +11,8 @@ import {
 const TZ_OFFSET = process.env.HIKVISION_TZ_OFFSET?.trim() || '-05:00';
 const MAX_EVENT_PAGES = 150;
 const MAX_USER_PAGES = 20;
-const FALLBACK_MINORS = [75, 38, 21, 22, 1, 0, 113];
-const ATTENDANCE_MINORS = [75, 38, 21, 22, 1, 9, 19, 20, 25, 26, 27, 119, 0];
+const FALLBACK_MINORS = [75, 38];
+const ATTENDANCE_MINORS = [75, 38];
 
 const asArray = <T>(value: T | T[] | undefined | null): T[] => {
     if (!value) return [];
@@ -144,42 +144,29 @@ export class MarcacionesRepository {
 
     async getEventos(desde: string, hasta: string): Promise<EventoReloj[]> {
         const minors = await this.resolverMinors();
-        const ventanas = [
-            { startTime: hikDateTime(desde, '00:00:00'), endTime: hikDateTime(hasta, '23:59:59') },
-            { startTime: `${desde}T00:00:00`, endTime: `${hasta}T23:59:59` },
-            { startTime: `${desde}T00:00:00+00:00`, endTime: `${hasta}T23:59:59+00:00` }
-        ];
-
+        const startTime = hikDateTime(desde, '00:00:00');
+        const endTime = hikDateTime(hasta, '23:59:59');
         const eventos: EventoReloj[] = [];
         const seen = new Set<string>();
         let lastError: unknown;
         let algunoAceptado = false;
 
-        for (const ventana of ventanas) {
-            for (const minor of minors) {
-                try {
-                    const page = await this.searchEventosRango(
-                        ventana.startTime,
-                        ventana.endTime,
-                        minor
-                    );
-                    algunoAceptado = true;
-                    console.log(
-                        `AcsEvent OK minor=${minor} ${ventana.startTime} (${page.length} eventos)`
-                    );
-                    for (const evento of page) {
-                        const key = `${evento.serialNo ?? ''}|${evento.time}|${evento.employeeNo}|${evento.minor}`;
-                        if (seen.has(key)) continue;
-                        seen.add(key);
-                        eventos.push(evento);
-                    }
-                } catch (error) {
-                    lastError = error;
-                    if (!esErrorDeMinor(error)) throw error;
-                    console.warn(`El reloj rechazó minor=${minor}`);
+        for (const minor of minors) {
+            try {
+                const page = await this.searchEventosRango(startTime, endTime, minor);
+                algunoAceptado = true;
+                console.log(`AcsEvent OK minor=${minor} ${startTime} (${page.length} eventos)`);
+                for (const evento of page) {
+                    const key = `${evento.serialNo ?? ''}|${evento.time}|${evento.employeeNo}|${evento.minor}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    eventos.push(evento);
                 }
+            } catch (error) {
+                lastError = error;
+                if (!esErrorDeMinor(error)) throw error;
+                console.warn(`El reloj rechazó minor=${minor}`);
             }
-            if (eventos.length > 0) break;
         }
 
         if (!algunoAceptado && lastError instanceof Error) {
