@@ -11,7 +11,8 @@ import {
 const TZ_OFFSET = process.env.HIKVISION_TZ_OFFSET?.trim() || '-05:00';
 const MAX_EVENT_PAGES = 150;
 const MAX_USER_PAGES = 20;
-const FALLBACK_MINORS = [0, 1, 21, 22, 38, 75, 113];
+const FALLBACK_MINORS = [75, 38, 21, 22, 1, 0, 113];
+const ATTENDANCE_MINORS = [75, 38, 21, 22, 1, 9, 19, 20, 25, 26, 27, 119, 0];
 
 const asArray = <T>(value: T | T[] | undefined | null): T[] => {
     if (!value) return [];
@@ -51,7 +52,7 @@ const parseMaxResults = (json: string): number => {
 };
 
 const eventoDesdeInfo = (info: AcsEventInfoRaw): EventoReloj | null => {
-    const employeeNo = toStringId(info.employeeNoString ?? info.employeeNo);
+    const employeeNo = toStringId(info.employeeNoString ?? info.employeeNo ?? info.cardNo);
     if (!employeeNo && !info.name) return null;
     return {
         employeeNo: employeeNo || 'sin-codigo',
@@ -63,6 +64,18 @@ const eventoDesdeInfo = (info: AcsEventInfoRaw): EventoReloj | null => {
         serialNo: info.serialNo,
         currentVerifyMode: info.currentVerifyMode
     };
+};
+
+const extraerInfos = (search: AcsEventResponse['AcsEvent']): AcsEventInfoRaw[] => {
+    if (!search) return [];
+    const direct = [...asArray(search.Info), ...asArray(search.InfoList)];
+    if (direct.length) return direct;
+    for (const value of Object.values(search)) {
+        if (Array.isArray(value) && value.length && typeof value[0] === 'object') {
+            return value as AcsEventInfoRaw[];
+        }
+    }
+    return [];
 };
 
 export class MarcacionesRepository {
@@ -130,26 +143,51 @@ export class MarcacionesRepository {
     }
 
     async getEventos(desde: string, hasta: string): Promise<EventoReloj[]> {
-        const startTime = hikDateTime(desde, '00:00:00');
-        const endTime = hikDateTime(hasta, '23:59:59');
         const minors = await this.resolverMinors();
-        let lastError: unknown;
+        const ventanas = [
+            { startTime: hikDateTime(desde, '00:00:00'), endTime: hikDateTime(hasta, '23:59:59') },
+            { startTime: `${desde}T00:00:00`, endTime: `${hasta}T23:59:59` },
+            { startTime: `${desde}T00:00:00+00:00`, endTime: `${hasta}T23:59:59+00:00` }
+        ];
 
-        for (const minor of minors) {
-            try {
-                const page = await this.searchEventosRango(startTime, endTime, minor);
-                console.log(`AcsEvent OK con minor=${minor} (${page.length} eventos)`);
-                return page;
-            } catch (error) {
-                lastError = error;
-                if (!esErrorDeMinor(error)) throw error;
-                console.warn(`El reloj rechazó minor=${minor}, se prueba el siguiente`);
+        const eventos: EventoReloj[] = [];
+        const seen = new Set<string>();
+        let lastError: unknown;
+        let algunoAceptado = false;
+
+        for (const ventana of ventanas) {
+            for (const minor of minors) {
+                try {
+                    const page = await this.searchEventosRango(
+                        ventana.startTime,
+                        ventana.endTime,
+                        minor
+                    );
+                    algunoAceptado = true;
+                    console.log(
+                        `AcsEvent OK minor=${minor} ${ventana.startTime} (${page.length} eventos)`
+                    );
+                    for (const evento of page) {
+                        const key = `${evento.serialNo ?? ''}|${evento.time}|${evento.employeeNo}|${evento.minor}`;
+                        if (seen.has(key)) continue;
+                        seen.add(key);
+                        eventos.push(evento);
+                    }
+                } catch (error) {
+                    lastError = error;
+                    if (!esErrorDeMinor(error)) throw error;
+                    console.warn(`El reloj rechazó minor=${minor}`);
+                }
             }
+            if (eventos.length > 0) break;
         }
 
-        throw lastError instanceof Error
-            ? lastError
-            : new Error('El reloj no aceptó ningún código de marcación (minor)');
+        if (!algunoAceptado && lastError instanceof Error) {
+            throw lastError;
+        }
+
+        eventos.sort((a, b) => a.time.localeCompare(b.time));
+        return eventos;
     }
 
     private async resolverMinors(): Promise<number[]> {
@@ -175,7 +213,7 @@ export class MarcacionesRepository {
             this.pageSize = parseMaxResults(json);
             const permitidos = parseOptNumbers(json, 'minorEvent');
             if (permitidos.length) {
-                const preferidos = [0, 1, 21, 22, 38, 75].filter((n) => permitidos.includes(n));
+                const preferidos = ATTENDANCE_MINORS.filter((n) => permitidos.includes(n));
                 this.minorsCache = preferidos.length ? preferidos : permitidos.slice(0, 5);
                 console.log(
                     `Reloj AcsEvent: maxResults=${this.pageSize}, minors=${this.minorsCache.join(',')}`
@@ -224,7 +262,12 @@ export class MarcacionesRepository {
             }
 
             const search = res.AcsEvent;
-            const page = asArray(search?.Info ?? search?.InfoList);
+            const page = extraerInfos(search);
+            if (pageNo === 0) {
+                console.log(
+                    `AcsEvent minor=${minor} totalMatches=${search?.totalMatches ?? 0} numOfMatches=${search?.numOfMatches ?? page.length} campos=${Object.keys(search || {}).join(',')}`
+                );
+            }
             let nuevos = 0;
             for (const info of page) {
                 const evento = eventoDesdeInfo(info);
@@ -234,6 +277,13 @@ export class MarcacionesRepository {
                 seen.add(key);
                 nuevos += 1;
                 eventos.push(evento);
+            }
+
+            if (pageNo === 0 && page.length > 0 && nuevos === 0) {
+                console.warn(
+                    'AcsEvent trajo filas sin empleado/nombre. Campos:',
+                    Object.keys(page[0] || {}).join(',')
+                );
             }
 
             const got = search?.numOfMatches ?? page.length;

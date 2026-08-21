@@ -106,6 +106,7 @@ export interface AcsEventInfoRaw {
     doorNo?: number;
     serialNo?: number;
     currentVerifyMode?: string;
+    cardNo?: string | number;
 }
 
 export interface AcsEventResponse {
@@ -116,6 +117,7 @@ export interface AcsEventResponse {
         totalMatches?: number;
         Info?: AcsEventInfoRaw | AcsEventInfoRaw[];
         InfoList?: AcsEventInfoRaw | AcsEventInfoRaw[];
+        [key: string]: unknown;
     };
     statusCode?: number;
     statusString?: string;
