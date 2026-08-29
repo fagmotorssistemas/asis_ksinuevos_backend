@@ -75,6 +75,53 @@ export interface MovimientoKardex {
     adjuntos: AdjuntoMovimiento[];
 }
 
+/** Adjunto de un pago de compra (CCOMPROBA_IMAGEN) */
+export interface AdjuntoPagoCompra {
+    secuencia: number;
+    url: string;
+    creaUsr?: string | null;
+    creaFecha?: string | null;
+}
+
+/** Fila de KSI_PAGOCOMPRA_VHN_V enriquecida con adjuntos */
+export interface PagoCompraVehiculo {
+    documento: string;          // COMPROBNATE_CANCELA (PAG/NDB/LS…)
+    tipo: string;               // Prefijo: PAG, NDB, LS…
+    ccoCodigo: string;          // CODIGO_PAGO — para /api/comprobantes/:ccoCodigo/imagenes
+    fecha: string | null;
+    monto: number;
+    banco: string | null;
+    concepto: string | null;
+    documentoTransaccion: string | null; // DCA_DDO_DOCTRAN
+    ing: string | null;         // DSP_COMPROBA ingreso
+    ccoIng: string | null;
+    aev: string | null;         // COMP_COMPRA
+    ccoAev: string | null;
+    tieneAdjunto: boolean;
+    adjuntos: AdjuntoPagoCompra[];
+}
+
+export interface ResumenPagosCompra {
+    cantidad: number;
+    montoTotal: number;
+    conAdjunto: number;
+    sinAdjunto: number;
+    porTipo: { tipo: string; cantidad: number; total: number }[];
+}
+
+export interface CompraVehiculoInfo {
+    ing: string | null;
+    ccoIng: string | null;
+    aev: string | null;
+    ccoAev: string | null;
+}
+
+export interface PagosCompraVehiculoResponse {
+    compra: CompraVehiculoInfo;
+    resumen: ResumenPagosCompra;
+    pagos: PagoCompraVehiculo[];
+}
+
 // NUEVA INTERFAZ: Respuesta del Detalle Completo
 export interface DetalleVehiculoResponse {
     fichaTecnica: VehiculoInventario | null;
@@ -84,6 +131,8 @@ export interface DetalleVehiculoResponse {
         margenAproximado: number;
     };
     historialMovimientos: MovimientoKardex[];
+    /** Pagos oficiales de la compra (vista KSI_PAGOCOMPRA_VHN_V) + adjuntos */
+    pagosCompra: PagosCompraVehiculoResponse;
 }
 
 export interface DashboardInventarioResponse {

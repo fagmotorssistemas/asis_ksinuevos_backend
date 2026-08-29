@@ -1,5 +1,5 @@
 import { InventarioRepository } from './inventario.repository';
-import { DashboardInventarioResponse, DetalleVehiculoResponse, MovimientoKardex } from './inventario.interface';
+import { DashboardInventarioResponse, DetalleVehiculoResponse } from './inventario.interface';
 
 export class InventarioService {
     private repository: InventarioRepository;
@@ -8,7 +8,6 @@ export class InventarioService {
         this.repository = new InventarioRepository();
     }
 
-    // Tu método existente para el Dashboard
     async obtenerDashboardInventario(): Promise<DashboardInventarioResponse> {
         const inventario = await this.repository.getInventarioCompleto();
         const totalVehiculos = inventario.length;
@@ -26,26 +25,26 @@ export class InventarioService {
         };
     }
 
-    // NUEVO MÉTODO: Obtiene la Hoja de Vida completa del vehículo
+    /** Ficha + kardex + pagos oficiales de compra (KSI_PAGOCOMPRA_VHN_V) con adjuntos */
     async obtenerHistorialVehiculo(placa: string): Promise<DetalleVehiculoResponse> {
-        // 1. Buscamos la ficha técnica
-        const fichaTecnica = await this.repository.getVehiculoByPlaca(placa);
-        
-        // 2. Buscamos todos los movimientos contables
-        const historial = await this.repository.getMovimientosKardex(placa);
+        const placaNorm = (placa || '').trim().toUpperCase();
 
-        // 3. Calculamos totales financieros simples
+        const [fichaTecnica, historial, pagosCompra] = await Promise.all([
+            this.repository.getVehiculoByPlaca(placaNorm),
+            this.repository.getMovimientosKardex(placaNorm),
+            this.repository.getPagosCompraPorPlaca(placaNorm)
+        ]);
+
         let totalInvertido = 0;
         let precioVenta = 0;
 
         historial.forEach(mov => {
-            // Lógica simple: Si es Ingreso (Compra) o Gasto (Obligacion), suma al costo
-            if (mov.esIngreso || mov.tipoTransaccion.includes('OBLIGACION') || mov.tipoTransaccion.includes('AJUSTE')) {
-                totalInvertido += mov.total;
+            const tipo = mov.tipoTransaccion || '';
+            if (mov.esIngreso || tipo.includes('OBLIGACION') || tipo.includes('AJUSTE')) {
+                totalInvertido += mov.total || 0;
             }
-            // Si es Salida (Venta/Nota Entrega), es lo que recuperamos
-            if (!mov.esIngreso && mov.tipoTransaccion.includes('NOTA DE ENTREGA')) {
-                precioVenta += mov.total;
+            if (!mov.esIngreso && tipo.includes('NOTA DE ENTREGA')) {
+                precioVenta += mov.total || 0;
             }
         });
 
@@ -56,7 +55,8 @@ export class InventarioService {
                 precioVenta,
                 margenAproximado: precioVenta > 0 ? (precioVenta - totalInvertido) : 0
             },
-            historialMovimientos: historial
+            historialMovimientos: historial,
+            pagosCompra
         };
     }
 }

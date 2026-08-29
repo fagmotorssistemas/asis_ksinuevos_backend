@@ -1,8 +1,35 @@
 import oracledb from 'oracledb';
 import { getConnection } from '../../config/oracle';
-import { VehiculoInventario, MovimientoKardex, AdjuntoMovimiento } from './inventario.interface';
+import {
+    VehiculoInventario,
+    MovimientoKardex,
+    AdjuntoMovimiento,
+    PagoCompraVehiculo,
+    PagosCompraVehiculoResponse,
+    AdjuntoPagoCompra
+} from './inventario.interface';
 
 const CODIGO_EMPRESA = 162;
+
+const imagenTableName = () =>
+    (process.env.ORACLE_CCOMPROBA_IMAGEN_TABLE || 'CCOMPROBA_IMAGEN').trim();
+
+const prefijoDocumento = (doc: string | null | undefined): string => {
+    if (!doc) return 'OTRO';
+    const t = String(doc).trim();
+    const i = t.indexOf('-');
+    return i > 0 ? t.slice(0, i) : t || 'OTRO';
+};
+
+const parseOracleDateIso = (dateVal: unknown): string | null => {
+    if (!dateVal) return null;
+    if (dateVal instanceof Date && !isNaN(dateVal.getTime())) return dateVal.toISOString();
+    if (typeof dateVal === 'string') {
+        const d = new Date(dateVal);
+        if (!isNaN(d.getTime())) return d.toISOString();
+    }
+    return null;
+};
 
 export class InventarioRepository {
 
@@ -83,7 +110,7 @@ export class InventarioRepository {
             
             const sql = `
                 SELECT * FROM ksi_vehculos_v 
-                WHERE COD_EMPRESA = :empresa AND PLACA = :placa
+                WHERE COD_EMPRESA = :empresa AND UPPER(TRIM(PLACA)) = UPPER(TRIM(:placa))
             `;
             
             const result = await connection.execute(
@@ -163,7 +190,7 @@ export class InventarioRepository {
                     TO_CHAR(CMO_CCO_FACTURA) AS CMO_FACTURA_STR,
                     CCO_CODCLIPRO
                 FROM MOVIMIENTOS_PRODUCTO_V_KSI
-                WHERE PLACA = :placa
+                WHERE UPPER(TRIM(PLACA)) = UPPER(TRIM(:placa))
                 ORDER BY CCO_FECHA DESC, DMO_SECUENCIA DESC
             `;
 
@@ -245,7 +272,7 @@ export class InventarioRepository {
                 };
             }));
 
-            await this.enrichAdjuntosKardex(connection, movimientos);
+            await this.enrichAdjuntosKardex(connection!, movimientos);
             return movimientos.map(({ _codclipro, ...mov }: any) => mov);
 
         } catch (error) {
@@ -257,11 +284,157 @@ export class InventarioRepository {
     }
 
     /**
-     * Adjuntos del propio movimiento (ING/NT/OBL) + acta AEV.
-     * PAG solo si hay exactamente un pago del mismo proveedor el mismo día.
+     * Pagos oficiales de compra del vehículo (KSI_PAGOCOMPRA_VHN_V) + adjuntos.
+     */
+    async getPagosCompraPorPlaca(placa: string): Promise<PagosCompraVehiculoResponse> {
+        let connection: oracledb.Connection | undefined;
+        const empty: PagosCompraVehiculoResponse = {
+            compra: { ing: null, ccoIng: null, aev: null, ccoAev: null },
+            resumen: { cantidad: 0, montoTotal: 0, conAdjunto: 0, sinAdjunto: 0, porTipo: [] },
+            pagos: []
+        };
+        try {
+            connection = await getConnection();
+            const imagenTable = imagenTableName();
+
+            const sql = `
+                SELECT
+                    v.DSP_COMPROBA AS ING,
+                    TO_CHAR(v.DMO_CMO_COMPROBA) AS CCO_ING,
+                    v.COMP_COMPRA AS AEV,
+                    TO_CHAR(v.CMO_CCO_FACTURA) AS CCO_AEV,
+                    v.COMPROBNATE_CANCELA AS DOC_PAGO,
+                    TO_CHAR(v.CODIGO_PAGO) AS CCO_PAGO,
+                    v.DCA_MONTO AS MONTO,
+                    v.CCO_FECHA AS FECHA_PAGO,
+                    v.BANCO,
+                    v.CCO_CONCEPTO,
+                    v.DCA_DDO_DOCTRAN
+                FROM KSI_PAGOCOMPRA_VHN_V v
+                WHERE v.CCO_EMPRESA = :empresa
+                  AND UPPER(TRIM(v.PLACA)) = UPPER(TRIM(:placa))
+                ORDER BY v.CCO_FECHA ASC, v.CODIGO_PAGO ASC
+            `;
+
+            const result: any = await connection.execute(
+                sql,
+                { empresa: CODIGO_EMPRESA, placa },
+                { outFormat: oracledb.OUT_FORMAT_OBJECT }
+            );
+            const rows: any[] = result.rows || [];
+            if (rows.length === 0) return empty;
+
+            const codigosPago = Array.from(
+                new Set(rows.map((r) => String(r.CCO_PAGO)).filter(Boolean))
+            );
+            const urlsByCodigo = await this.loadImagenesByCodigos(connection, imagenTable, codigosPago);
+
+            const pagos: PagoCompraVehiculo[] = rows.map((r) => {
+                const ccoCodigo = String(r.CCO_PAGO || '');
+                const adjuntos: AdjuntoPagoCompra[] = (urlsByCodigo.get(ccoCodigo) || []).map((img) => ({
+                    secuencia: img.secuencia,
+                    url: img.ccoUrl,
+                    creaUsr: img.creaUsr,
+                    creaFecha: img.creaFecha
+                }));
+                return {
+                    documento: r.DOC_PAGO || '',
+                    tipo: prefijoDocumento(r.DOC_PAGO),
+                    ccoCodigo,
+                    fecha: parseOracleDateIso(r.FECHA_PAGO),
+                    monto: Number(r.MONTO) || 0,
+                    banco: r.BANCO != null ? String(r.BANCO) : null,
+                    concepto: r.CCO_CONCEPTO != null ? String(r.CCO_CONCEPTO) : null,
+                    documentoTransaccion: r.DCA_DDO_DOCTRAN != null ? String(r.DCA_DDO_DOCTRAN) : null,
+                    ing: r.ING != null ? String(r.ING) : null,
+                    ccoIng: r.CCO_ING != null ? String(r.CCO_ING) : null,
+                    aev: r.AEV != null ? String(r.AEV) : null,
+                    ccoAev: r.CCO_AEV != null ? String(r.CCO_AEV) : null,
+                    tieneAdjunto: adjuntos.length > 0,
+                    adjuntos
+                };
+            });
+
+            const porTipoMap = new Map<string, { tipo: string; cantidad: number; total: number }>();
+            let montoTotal = 0;
+            let conAdjunto = 0;
+            for (const p of pagos) {
+                montoTotal += p.monto;
+                if (p.tieneAdjunto) conAdjunto += 1;
+                const cur = porTipoMap.get(p.tipo) || { tipo: p.tipo, cantidad: 0, total: 0 };
+                cur.cantidad += 1;
+                cur.total += p.monto;
+                porTipoMap.set(p.tipo, cur);
+            }
+
+            const first = pagos[0];
+            return {
+                compra: {
+                    ing: first.ing,
+                    ccoIng: first.ccoIng,
+                    aev: first.aev,
+                    ccoAev: first.ccoAev
+                },
+                resumen: {
+                    cantidad: pagos.length,
+                    montoTotal,
+                    conAdjunto,
+                    sinAdjunto: pagos.length - conAdjunto,
+                    porTipo: Array.from(porTipoMap.values()).sort((a, b) => b.total - a.total)
+                },
+                pagos
+            };
+        } catch (error) {
+            console.error(`Error en getPagosCompraPorPlaca placa ${placa}:`, error);
+            throw error;
+        } finally {
+            if (connection) try { await connection.close(); } catch (e) {}
+        }
+    }
+
+    private async loadImagenesByCodigos(
+        connection: oracledb.Connection,
+        imagenTable: string,
+        codigos: string[]
+    ): Promise<Map<string, { secuencia: number; ccoUrl: string; creaUsr?: string | null; creaFecha?: string | null }[]>> {
+        const map = new Map<string, { secuencia: number; ccoUrl: string; creaUsr?: string | null; creaFecha?: string | null }[]>();
+        if (codigos.length === 0) return map;
+
+        const binds: Record<string, string | number> = { empresa: CODIGO_EMPRESA };
+        const placeholders = codigos.map((c, i) => {
+            binds[`c${i}`] = c;
+            return `:c${i}`;
+        }).join(', ');
+
+        const rImg: any = await connection.execute(
+            `SELECT TO_CHAR(CCO_CODIGO) AS CCO_CODIGO_STR, CCO_SECUENCIA, CCO_URL, CREA_USR, CREA_FECHA
+             FROM ${imagenTable}
+             WHERE CCO_EMPRESA = :empresa AND CCO_CODIGO IN (${placeholders})
+             ORDER BY CCO_SECUENCIA`,
+            binds,
+            { outFormat: oracledb.OUT_FORMAT_OBJECT }
+        );
+
+        for (const row of rImg.rows || []) {
+            const codigo = String(row.CCO_CODIGO_STR);
+            const arr = map.get(codigo) || [];
+            arr.push({
+                secuencia: row.CCO_SECUENCIA,
+                ccoUrl: row.CCO_URL,
+                creaUsr: row.CREA_USR,
+                creaFecha: parseOracleDateIso(row.CREA_FECHA)
+            });
+            map.set(codigo, arr);
+        }
+        return map;
+    }
+
+    /**
+     * Adjuntos del movimiento (ING/NT/OBL) + acta AEV.
+     * Pagos de compra: desde KSI_PAGOCOMPRA_VHN_V (llave oficial placa/ING → CODIGO_PAGO).
      */
     private async enrichAdjuntosKardex(connection: oracledb.Connection, movimientos: any[]): Promise<void> {
-        const imagenTable = (process.env.ORACLE_CCOMPROBA_IMAGEN_TABLE || 'CCOMPROBA_IMAGEN').trim();
+        const imagenTable = imagenTableName();
         const codigos = new Set<string>();
         for (const mov of movimientos) {
             if (mov.ccoCodigo) codigos.add(mov.ccoCodigo);
@@ -269,61 +442,71 @@ export class InventarioRepository {
         }
 
         const ingresos = movimientos.filter((m) =>
-            String(m.tipoTransaccion || '').toUpperCase().includes('INGRESO DE BODEGA') && m._codclipro != null && m.fecha
+            String(m.tipoTransaccion || '').toUpperCase().includes('INGRESO DE BODEGA') && m.ccoCodigo
         );
 
-        for (const ing of ingresos) {
+        // Pagos oficiales por cco del ING
+        const pagosPorIng = new Map<string, { documento: string; ccoCodigo: string }[]>();
+        if (ingresos.length > 0) {
             try {
+                const ingCodigos = Array.from(new Set(ingresos.map((i) => String(i.ccoCodigo))));
+                const binds: Record<string, string | number> = { empresa: CODIGO_EMPRESA };
+                const placeholders = ingCodigos.map((c, i) => {
+                    binds[`i${i}`] = c;
+                    return `:i${i}`;
+                }).join(', ');
+
                 const rPag: any = await connection.execute(
-                    `SELECT DSP_COMPROBA, TO_CHAR(CCO_CODIGO) AS CCO_CODIGO_STR
-                     FROM LIST_CCOMPROBA_V
+                    `SELECT TO_CHAR(DMO_CMO_COMPROBA) AS CCO_ING,
+                            COMPROBNATE_CANCELA AS DOC_PAGO,
+                            TO_CHAR(CODIGO_PAGO) AS CCO_PAGO
+                     FROM KSI_PAGOCOMPRA_VHN_V
                      WHERE CCO_EMPRESA = :empresa
-                       AND DSP_COMPROBA LIKE 'PAG%'
-                       AND CCO_CODCLIPRO = :prov
-                       AND TRUNC(CCO_FECHA) = TRUNC(:fecha)
-                     ORDER BY CCO_CODIGO`,
-                    { empresa: CODIGO_EMPRESA, prov: ing._codclipro, fecha: ing.fecha },
+                       AND DMO_CMO_COMPROBA IN (${placeholders})
+                     ORDER BY CCO_FECHA, CODIGO_PAGO`,
+                    binds,
                     { outFormat: oracledb.OUT_FORMAT_OBJECT }
                 );
-                const pags = rPag.rows || [];
-                if (pags.length === 1) {
-                    ing.pagoRelacion = 'unica';
-                    ing.pagoDocumento = pags[0].DSP_COMPROBA;
-                    ing.pagoCcoCodigo = String(pags[0].CCO_CODIGO_STR);
-                    if (ing.pagoCcoCodigo) codigos.add(ing.pagoCcoCodigo);
-                } else if (pags.length > 1) {
-                    ing.pagoRelacion = 'ambigua';
-                } else {
-                    ing.pagoRelacion = 'ninguna';
+
+                for (const row of rPag.rows || []) {
+                    const ing = String(row.CCO_ING);
+                    const pago = String(row.CCO_PAGO || '');
+                    const doc = row.DOC_PAGO ? String(row.DOC_PAGO) : '';
+                    if (!pago) continue;
+                    const arr = pagosPorIng.get(ing) || [];
+                    if (!arr.some((p) => p.ccoCodigo === pago)) {
+                        arr.push({ documento: doc, ccoCodigo: pago });
+                    }
+                    pagosPorIng.set(ing, arr);
+                    codigos.add(pago);
                 }
             } catch (e) {
-                console.warn('No se pudo cruzar PAG único para ingreso de inventario:', e);
+                console.warn('No se pudo leer KSI_PAGOCOMPRA_VHN_V para kardex:', e);
             }
         }
 
-        const urlsByCodigo = new Map<string, { ccoUrl: string }[]>();
-        const lista = Array.from(codigos);
-        if (lista.length > 0) {
-            const binds: Record<string, string> = {};
-            const placeholders = lista.map((c, i) => {
-                binds[`c${i}`] = c;
-                return `:c${i}`;
-            }).join(', ');
-            const rImg: any = await connection.execute(
-                `SELECT TO_CHAR(CCO_CODIGO) AS CCO_CODIGO_STR, CCO_URL
-                 FROM ${imagenTable}
-                 WHERE CCO_EMPRESA = :empresa AND CCO_CODIGO IN (${placeholders})
-                 ORDER BY CCO_SECUENCIA`,
-                { empresa: CODIGO_EMPRESA, ...binds },
-                { outFormat: oracledb.OUT_FORMAT_OBJECT }
-            );
-            for (const row of rImg.rows || []) {
-                const codigo = String(row.CCO_CODIGO_STR);
-                const arr = urlsByCodigo.get(codigo) || [];
-                arr.push({ ccoUrl: row.CCO_URL });
-                urlsByCodigo.set(codigo, arr);
+        for (const ing of ingresos) {
+            const pags = pagosPorIng.get(String(ing.ccoCodigo)) || [];
+            if (pags.length === 1) {
+                ing.pagoRelacion = 'unica';
+                ing.pagoDocumento = pags[0].documento;
+                ing.pagoCcoCodigo = pags[0].ccoCodigo;
+            } else if (pags.length > 1) {
+                // Varios pagos oficiales de la misma compra: no es ambiguo, es multi-pago
+                ing.pagoRelacion = 'unica';
+                ing.pagoDocumento = pags.map((p) => p.documento).join(', ');
+                ing.pagoCcoCodigo = pags[0].ccoCodigo;
+                (ing as any)._pagosCompra = pags;
+            } else {
+                ing.pagoRelacion = 'ninguna';
             }
         }
+
+        const urlsByCodigo = await this.loadImagenesByCodigos(
+            connection,
+            imagenTable,
+            Array.from(codigos)
+        );
 
         const pushAdj = (mov: any, codigo: string | undefined, origen: AdjuntoMovimiento['origen']) => {
             if (!codigo) return;
@@ -337,11 +520,15 @@ export class InventarioRepository {
             pushAdj(mov, mov.ccoCodigo, 'MOVIMIENTO');
             if (String(mov.tipoTransaccion || '').toUpperCase().includes('INGRESO DE BODEGA')) {
                 pushAdj(mov, mov.ccoCodigoActa, 'ACTA');
-                if (mov.pagoRelacion === 'unica') {
+                const multi = (mov as any)._pagosCompra as { documento: string; ccoCodigo: string }[] | undefined;
+                if (multi && multi.length > 0) {
+                    for (const p of multi) pushAdj(mov, p.ccoCodigo, 'PAG');
+                } else if (mov.pagoRelacion === 'unica') {
                     pushAdj(mov, mov.pagoCcoCodigo, 'PAG');
                 }
             }
             mov.tieneAdjunto = mov.adjuntos.length > 0;
+            delete (mov as any)._pagosCompra;
         }
     }
 }
