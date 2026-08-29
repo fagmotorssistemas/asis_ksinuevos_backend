@@ -329,7 +329,8 @@ export class InventarioRepository {
             );
             const urlsByCodigo = await this.loadImagenesByCodigos(connection, imagenTable, codigosPago);
 
-            const pagos: PagoCompraVehiculo[] = rows.map((r) => {
+            const totalPartes = rows.length;
+            const pagos: PagoCompraVehiculo[] = rows.map((r, idx) => {
                 const ccoCodigo = String(r.CCO_PAGO || '');
                 const adjuntos: AdjuntoPagoCompra[] = (urlsByCodigo.get(ccoCodigo) || []).map((img) => ({
                     secuencia: img.secuencia,
@@ -341,6 +342,8 @@ export class InventarioRepository {
                     documento: r.DOC_PAGO || '',
                     tipo: prefijoDocumento(r.DOC_PAGO),
                     ccoCodigo,
+                    parte: idx + 1,
+                    totalPartes,
                     fecha: parseOracleDateIso(r.FECHA_PAGO),
                     monto: Number(r.MONTO) || 0,
                     banco: r.BANCO != null ? String(r.BANCO) : null,

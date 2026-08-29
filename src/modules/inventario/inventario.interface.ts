@@ -83,11 +83,14 @@ export interface AdjuntoPagoCompra {
     creaFecha?: string | null;
 }
 
-/** Fila de KSI_PAGOCOMPRA_VHN_V enriquecida con adjuntos */
+/** Fila de KSI_PAGOCOMPRA_VHN_V enriquecida con adjuntos (adjuntos puede ir vacío) */
 export interface PagoCompraVehiculo {
     documento: string;          // COMPROBNATE_CANCELA (PAG/NDB/LS…)
     tipo: string;               // Prefijo: PAG, NDB, LS…
     ccoCodigo: string;          // CODIGO_PAGO — para /api/comprobantes/:ccoCodigo/imagenes
+    /** Parte N de totalPartes (cuotas / abonos de la misma compra) */
+    parte: number;
+    totalPartes: number;
     fecha: string | null;
     monto: number;
     banco: string | null;
