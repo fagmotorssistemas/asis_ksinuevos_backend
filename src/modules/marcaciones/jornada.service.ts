@@ -11,7 +11,7 @@ const ENTRADA_MANANA_LIMITE = 12 * 60;
 const LEGAL_SEMANA = 8;
 const LEGAL_SABADO = 4;
 
-export type EstadoJornada = 'de_mas' | 'de_menos' | 'justo' | 'falta' | 'no_laboral';
+export type EstadoJornada = 'de_mas' | 'de_menos' | 'justo' | 'falta' | 'no_laboral' | 'libre';
 
 export const formatHorasReloj = (horas: number): string => {
     const totalMin = Math.round(Math.max(0, horas) * 60);
@@ -216,8 +216,36 @@ export const calcularJornadaDia = (fecha: string, marcas: Marcacion[]): DiaJorna
     });
 };
 
+export const aplicarSabadoLibre = (dias: DiaJornada[], hasta: string): DiaJornada[] => {
+    const candidatos = dias
+        .filter(
+            (d) =>
+                d.total === 0 &&
+                d.fecha <= hasta &&
+                horasLegalesDeFecha(d.fecha) === LEGAL_SABADO
+        )
+        .sort((a, b) => a.fecha.localeCompare(b.fecha));
+    if (!candidatos.length) return dias;
+
+    const fechaLibre = candidatos[0].fecha;
+    return dias.map((d) => {
+        if (d.fecha !== fechaLibre) return d;
+        return {
+            ...d,
+            horasHechas: 0,
+            horasHechasFmt: formatHorasReloj(0),
+            horasLegales: 0,
+            horasLegalesFmt: formatHorasReloj(0),
+            diferencia: 0,
+            diferenciaFmt: formatHorasRelojSigned(0),
+            estado: 'libre',
+            alertas: []
+        };
+    });
+};
+
 export const sumarTotales = (dias: DiaJornada[]): TotalesJornada => {
-    const laborales = dias.filter((d) => d.estado !== 'no_laboral');
+    const laborales = dias.filter((d) => d.estado !== 'no_laboral' && d.estado !== 'libre');
     const hechas = round2(laborales.reduce((s, d) => s + d.horasHechas, 0));
     const legales = round2(laborales.reduce((s, d) => s + d.horasLegales, 0));
     const diferencia = round2(hechas - legales);

@@ -16,6 +16,7 @@ import {
     fechasLaboralesDelMes,
     formatHorasReloj,
     mesEstaCerrado,
+    aplicarSabadoLibre,
     sumarTotales
 } from './jornada.service';
 
@@ -336,9 +337,13 @@ export class MarcacionesService {
                 return calcularJornadaDia(fecha, marcas);
             });
 
-            usuario.dias = dias;
-            usuario.totalMarcaciones = dias.reduce((sum, dia) => sum + dia.total, 0);
-            usuario.totales = sumarTotales(dias);
+            const diasFinal = completarFaltas
+                ? aplicarSabadoLibre(dias, rango.hasta < hoyIso() ? rango.hasta : hoyIso())
+                : dias;
+
+            usuario.dias = diasFinal;
+            usuario.totalMarcaciones = diasFinal.reduce((sum, dia) => sum + dia.total, 0);
+            usuario.totales = sumarTotales(diasFinal);
         }
 
         const listado = Array.from(agrupado.values()).sort((a, b) =>
