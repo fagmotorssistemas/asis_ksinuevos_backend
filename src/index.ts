@@ -4,14 +4,20 @@
 // @supabase/supabase-js v2 necesita fetch/Headers globales (Node 18+).
 // =============================================================
 /* eslint-disable @typescript-eslint/no-var-requires */
-const _nodeFetch = require('node-fetch');
 if (!globalThis.fetch) {
-    Object.assign(globalThis, {
-        fetch: _nodeFetch.default ?? _nodeFetch,
-        Headers: _nodeFetch.Headers,
-        Request: _nodeFetch.Request,
-        Response: _nodeFetch.Response,
-    });
+    try {
+        const _nodeFetch = require('node-fetch');
+        Object.assign(globalThis, {
+            fetch: _nodeFetch.default ?? _nodeFetch,
+            Headers: _nodeFetch.Headers,
+            Request: _nodeFetch.Request,
+            Response: _nodeFetch.Response,
+        });
+    } catch (err) {
+        console.warn(
+            'node-fetch no está instalado. El resto del API arranca igual; marcaciones/Supabase pueden fallar. Ejecute: npm install node-fetch@2'
+        );
+    }
 }
 /* eslint-enable @typescript-eslint/no-var-requires */
 // =============================================================

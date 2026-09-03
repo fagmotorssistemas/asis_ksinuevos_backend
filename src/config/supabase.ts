@@ -1,5 +1,19 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import ws from 'ws';
+
+/**
+ * Node 16 no tiene WebSocket nativo. El cliente de Supabase lo exige al crear
+ * el RealtimeClient aunque no usemos realtime. Hay que inyectar `ws` en global
+ * ANTES de createClient (pasar solo realtime.transport no alcanza en esta versión).
+ */
+/* eslint-disable @typescript-eslint/no-var-requires */
+const WsImpl = require('ws');
+/* eslint-enable @typescript-eslint/no-var-requires */
+if (typeof (globalThis as { WebSocket?: unknown }).WebSocket === 'undefined') {
+    (globalThis as { WebSocket?: unknown }).WebSocket = WsImpl;
+}
+if (typeof (global as { WebSocket?: unknown }).WebSocket === 'undefined') {
+    (global as { WebSocket?: unknown }).WebSocket = WsImpl;
+}
 
 /**
  * Valores por defecto (proyecto KsiNuevos_Web) — temporal hasta migrar a .env seguro.
@@ -29,8 +43,7 @@ export const getSupabaseAdmin = (): SupabaseClient => {
 
     adminClient = createClient(url, serviceKey, {
         auth: { persistSession: false, autoRefreshToken: false },
-        // Node 16 no trae WebSocket nativo; el cliente de Supabase lo exige al iniciar.
-        realtime: { transport: ws as never }
+        realtime: { transport: WsImpl as never }
     });
     return adminClient;
 };
