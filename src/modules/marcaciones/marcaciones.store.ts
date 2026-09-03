@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '../../config/supabase';
+import { extraerFechaHoraLocal, horaLocalDesdeFila, occurredAtEcuador } from './hora.util';
 import { EventoReloj, UsuarioReloj } from './marcaciones.interface';
 
 export interface EventoGuardado {
@@ -18,14 +19,6 @@ export interface SyncState {
     last_event_at: string | null;
     last_error: string | null;
 }
-
-const extraerFechaHora = (time: string): { fecha: string; hora: string } => {
-    const [fechaRaw = '', horaRaw = '00:00:00'] = (time || '').split('T');
-    return {
-        fecha: fechaRaw.slice(0, 10),
-        hora: horaRaw.replace('Z', '').slice(0, 8)
-    };
-};
 
 export class MarcacionesStore {
     async getSyncState(): Promise<SyncState | null> {
@@ -75,7 +68,7 @@ export class MarcacionesStore {
         for (let from = 0; from < 20000; from += pageSize) {
             const { data, error } = await getSupabaseAdmin()
                 .from('marcaciones_eventos')
-                .select('employee_no, nombre, occurred_at, minor, serial_no, door_no, metodo')
+                .select('employee_no, nombre, occurred_at, fecha, hora, minor, serial_no, door_no, metodo')
                 .gte('fecha', desde)
                 .lte('fecha', hasta)
                 .order('occurred_at', { ascending: true })
@@ -86,7 +79,7 @@ export class MarcacionesStore {
                 eventos.push({
                     employeeNo: row.employee_no,
                     nombre: row.nombre || row.employee_no,
-                    time: row.occurred_at,
+                    time: horaLocalDesdeFila(row.fecha, row.hora, row.occurred_at),
                     major: 5,
                     minor: row.minor,
                     serialNo: row.serial_no || undefined,
@@ -119,7 +112,7 @@ export class MarcacionesStore {
         const rows: EventoGuardado[] = [];
         const seen = new Set<string>();
         for (const ev of eventos) {
-            const { fecha, hora } = extraerFechaHora(ev.time);
+            const { fecha, hora } = extraerFechaHoraLocal(ev.time);
             if (!fecha) continue;
             const serial = ev.serialNo ?? 0;
             const key = `${ev.employeeNo}|${ev.time}|${ev.minor}|${serial}`;
@@ -128,7 +121,7 @@ export class MarcacionesStore {
             rows.push({
                 employee_no: ev.employeeNo,
                 nombre: ev.nombre || null,
-                occurred_at: ev.time,
+                occurred_at: occurredAtEcuador(fecha, hora),
                 fecha,
                 hora,
                 metodo: ev.currentVerifyMode || null,

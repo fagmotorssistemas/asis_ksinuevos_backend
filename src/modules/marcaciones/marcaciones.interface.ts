@@ -44,16 +44,22 @@ export interface DiaMarcaciones {
     salida?: string | null;
     salidaReal?: boolean;
     horasHechas?: number;
+    horasHechasFmt?: string;
     horasLegales?: number;
+    horasLegalesFmt?: string;
     diferencia?: number;
+    diferenciaFmt?: string;
     estado?: string;
     alertas?: string[];
 }
 
 export interface TotalesUsuario {
     horasHechas: number;
+    horasHechasFmt: string;
     horasLegales: number;
+    horasLegalesFmt: string;
     diferencia: number;
+    diferenciaFmt: string;
     diasLaborales: number;
     diasConAlerta: number;
 }
@@ -93,7 +99,9 @@ export interface DiaInformeMes {
     almuerzoVuelta: string | null;
     salida: string | null;
     horasHechas: number;
+    horasHechasFmt: string;
     horasLegales: number;
+    horasLegalesFmt: string;
     diferencia: number;
     extras: number;
     deMenos: number;
@@ -107,7 +115,9 @@ export interface EmpleadoInformeMes {
     dias: DiaInformeMes[];
     totales: {
         hechas: number;
+        hechasFmt: string;
         legales: number;
+        legalesFmt: string;
         diferencia: number;
         extras: number;
         deMenos: number;

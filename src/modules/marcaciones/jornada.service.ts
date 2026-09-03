@@ -4,10 +4,26 @@ const CLUSTER_MIN = 5;
 const CORTE_MIN = 20 * 60;
 const ALMUERZO_DEFAULT_MIN = 60;
 const SPAN_PARA_ALMUERZO_MIN = 5 * 60;
+const ALMUERZO_GAP_MIN = 25;
+const ALMUERZO_GAP_MAX = 150;
+const ALMUERZO_IDA_LIMITE = 16 * 60;
+const ENTRADA_MANANA_LIMITE = 12 * 60;
 const LEGAL_SEMANA = 8;
 const LEGAL_SABADO = 4;
 
 export type EstadoJornada = 'de_mas' | 'de_menos' | 'justo' | 'falta' | 'no_laboral';
+
+export const formatHorasReloj = (horas: number): string => {
+    const totalMin = Math.round(Math.max(0, horas) * 60);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return `${h}:${String(m).padStart(2, '0')}`;
+};
+
+export const formatHorasRelojSigned = (horas: number): string => {
+    const sign = horas < 0 ? '-' : '';
+    return `${sign}${formatHorasReloj(Math.abs(horas))}`;
+};
 
 export interface DiaJornada extends DiaMarcaciones {
     entrada: string | null;
@@ -16,16 +32,22 @@ export interface DiaJornada extends DiaMarcaciones {
     salida: string | null;
     salidaReal: boolean;
     horasHechas: number;
+    horasHechasFmt: string;
     horasLegales: number;
+    horasLegalesFmt: string;
     diferencia: number;
+    diferenciaFmt: string;
     estado: EstadoJornada;
     alertas: string[];
 }
 
 export interface TotalesJornada {
     horasHechas: number;
+    horasHechasFmt: string;
     horasLegales: number;
+    horasLegalesFmt: string;
     diferencia: number;
+    diferenciaFmt: string;
     diasLaborales: number;
     diasConAlerta: number;
 }
@@ -68,6 +90,28 @@ const estadoDesdeDiff = (diff: number): EstadoJornada => {
     return diff > 0 ? 'de_mas' : 'de_menos';
 };
 
+const detectarAlmuerzo = (
+    utiles: Marcacion[]
+): { ida: Marcacion; vuelta: Marcacion } | null => {
+    if (utiles.length < 3) return null;
+    const entradaMin = horaAMin(utiles[0].hora);
+    if (entradaMin >= ENTRADA_MANANA_LIMITE) return null;
+
+    for (let i = 1; i < utiles.length - 1; i += 1) {
+        const idaMin = horaAMin(utiles[i].hora);
+        const vueltaMin = horaAMin(utiles[i + 1].hora);
+        const gap = vueltaMin - idaMin;
+        if (
+            gap >= ALMUERZO_GAP_MIN &&
+            gap <= ALMUERZO_GAP_MAX &&
+            idaMin < ALMUERZO_IDA_LIMITE
+        ) {
+            return { ida: utiles[i], vuelta: utiles[i + 1] };
+        }
+    }
+    return null;
+};
+
 export const horasLegalesDeFecha = (fecha: string): number => {
     const dow = weekdayIso(fecha);
     if (dow === 0) return 0;
@@ -79,124 +123,111 @@ export const calcularJornadaDia = (fecha: string, marcas: Marcacion[]): DiaJorna
     const marcaciones = [...marcas].sort((a, b) => a.hora.localeCompare(b.hora));
     const legales = horasLegalesDeFecha(fecha);
     const alertas: string[] = [];
-    const vacio = (extra: Partial<DiaJornada> = {}): DiaJornada => ({
-        fecha,
-        total: marcaciones.length,
-        marcaciones,
-        entrada: null,
-        almuerzoIda: null,
-        almuerzoVuelta: null,
-        salida: null,
-        salidaReal: false,
-        horasHechas: 0,
-        horasLegales: legales,
-        diferencia: round2(0 - legales),
-        estado: legales === 0 ? 'no_laboral' : 'falta',
-        alertas,
-        ...extra
-    });
+    const base = (extra: Partial<DiaJornada> = {}): DiaJornada => {
+        const horasHechas = extra.horasHechas ?? 0;
+        const diferencia = extra.diferencia ?? round2(horasHechas - legales);
+        return {
+            fecha,
+            total: marcaciones.length,
+            marcaciones,
+            entrada: null,
+            almuerzoIda: null,
+            almuerzoVuelta: null,
+            salida: null,
+            salidaReal: false,
+            horasHechas,
+            horasHechasFmt: formatHorasReloj(horasHechas),
+            horasLegales: legales,
+            horasLegalesFmt: formatHorasReloj(legales),
+            diferencia,
+            diferenciaFmt: formatHorasRelojSigned(diferencia),
+            estado: legales === 0 ? 'no_laboral' : 'falta',
+            alertas,
+            ...extra
+        };
+    };
 
     if (legales === 0) {
         if (marcaciones.length) {
             alertas.push('Domingo: no cuenta como jornada laboral');
         }
-        return vacio({ estado: 'no_laboral', diferencia: 0 });
+        return base({ estado: 'no_laboral', diferencia: 0, horasHechas: 0 });
     }
 
     const utiles = clusterMarcas(marcaciones);
     if (!utiles.length) {
-        return vacio();
+        return base();
     }
 
     const entrada = utiles[0];
     const entradaMin = horaAMin(entrada.hora);
+    const ultima = utiles[utiles.length - 1];
+    const ultimaMin = horaAMin(ultima.hora);
+    const sinSalida = utiles.length === 1;
+    const salidaDespuesDeCorte = ultimaMin > CORTE_MIN;
+    const finJornada = sinSalida || salidaDespuesDeCorte ? CORTE_MIN : ultimaMin;
+    const salidaReal = utiles.length > 1 && ultimaMin <= CORTE_MIN;
+
+    if (sinSalida) {
+        alertas.push('No marcó salida; se cortó a las 20:00');
+    } else if (salidaDespuesDeCorte) {
+        alertas.push('La salida fue después de las 20:00; se cortó a las 20:00');
+    }
+
+    const almuerzo = detectarAlmuerzo(utiles);
     let almuerzoIda: string | null = null;
     let almuerzoVuelta: string | null = null;
-    let salidaHora: string | null = null;
-    let salidaReal = false;
-    let hechasMin = 0;
+    let hechasMin = Math.max(0, finJornada - entradaMin);
 
-    if (utiles.length === 1) {
-        alertas.push('No marcó salida; se cortó a las 20:00');
-        const fin = CORTE_MIN;
-        hechasMin = Math.max(0, fin - entradaMin);
-        if (legales === LEGAL_SEMANA && hechasMin > SPAN_PARA_ALMUERZO_MIN) {
-            hechasMin -= ALMUERZO_DEFAULT_MIN;
+    if (almuerzo) {
+        almuerzoIda = almuerzo.ida.hora;
+        almuerzoVuelta = almuerzo.vuelta.hora;
+        const idaMin = horaAMin(almuerzo.ida.hora);
+        const vueltaMin = horaAMin(almuerzo.vuelta.hora);
+        if (idaMin > entradaMin && vueltaMin > idaMin && finJornada >= vueltaMin) {
+            hechasMin = idaMin - entradaMin + (finJornada - vueltaMin);
         }
-        salidaHora = minAHora(CORTE_MIN);
-    } else if (utiles.length === 2) {
-        const finRaw = Math.min(horaAMin(utiles[1].hora), CORTE_MIN);
-        salidaReal = horaAMin(utiles[1].hora) <= CORTE_MIN;
-        if (horaAMin(utiles[1].hora) > CORTE_MIN) {
-            alertas.push('La salida fue después de las 20:00; se cortó a las 20:00');
-        }
-        salidaHora = minAHora(finRaw);
-        hechasMin = Math.max(0, finRaw - entradaMin);
-        if (legales === LEGAL_SEMANA && hechasMin > SPAN_PARA_ALMUERZO_MIN) {
-            hechasMin -= ALMUERZO_DEFAULT_MIN;
-        }
-    } else if (utiles.length === 3) {
-        alertas.push('3 marcas útiles: se tomó primera y última; la del medio no se emparejó como almuerzo');
-        const finRaw = Math.min(horaAMin(utiles[2].hora), CORTE_MIN);
-        salidaReal = horaAMin(utiles[2].hora) <= CORTE_MIN;
-        salidaHora = minAHora(finRaw);
-        hechasMin = Math.max(0, finRaw - entradaMin);
-        if (legales === LEGAL_SEMANA && hechasMin > SPAN_PARA_ALMUERZO_MIN) {
-            hechasMin -= ALMUERZO_DEFAULT_MIN;
-        }
-    } else {
-        const ida = utiles[1];
-        const vuelta = utiles[2];
-        const salida = utiles[utiles.length - 1];
-        almuerzoIda = ida.hora;
-        almuerzoVuelta = vuelta.hora;
-        const idaMin = horaAMin(ida.hora);
-        const vueltaMin = horaAMin(vuelta.hora);
-        const finRaw = Math.min(horaAMin(salida.hora), CORTE_MIN);
-        salidaReal = horaAMin(salida.hora) <= CORTE_MIN;
-        if (horaAMin(salida.hora) > CORTE_MIN) {
-            alertas.push('La salida fue después de las 20:00; se cortó a las 20:00');
-        }
-        salidaHora = minAHora(finRaw);
-        if (idaMin > entradaMin && vueltaMin > idaMin && finRaw >= vueltaMin) {
-            hechasMin = idaMin - entradaMin + (finRaw - vueltaMin);
-        } else {
-            alertas.push('Par de almuerzo inválido; se calculó entrada–salida menos 1 h');
-            hechasMin = Math.max(0, finRaw - entradaMin);
-            if (legales === LEGAL_SEMANA && hechasMin > SPAN_PARA_ALMUERZO_MIN) {
-                hechasMin -= ALMUERZO_DEFAULT_MIN;
-            }
-        }
+    } else if (
+        utiles.length === 2 &&
+        legales === LEGAL_SEMANA &&
+        entradaMin < ENTRADA_MANANA_LIMITE &&
+        hechasMin > SPAN_PARA_ALMUERZO_MIN &&
+        finJornada >= 16 * 60
+    ) {
+        hechasMin -= ALMUERZO_DEFAULT_MIN;
     }
 
     const horasHechas = round2(Math.max(0, hechasMin / 60));
     const diferencia = round2(horasHechas - legales);
 
-    return {
-        fecha,
-        total: marcaciones.length,
-        marcaciones,
+    return base({
         entrada: entrada.hora,
         almuerzoIda,
         almuerzoVuelta,
-        salida: salidaHora,
+        salida: minAHora(finJornada),
         salidaReal,
         horasHechas,
-        horasLegales: legales,
+        horasHechasFmt: formatHorasReloj(horasHechas),
+        horasLegalesFmt: formatHorasReloj(legales),
         diferencia,
+        diferenciaFmt: formatHorasRelojSigned(diferencia),
         estado: estadoDesdeDiff(diferencia),
         alertas
-    };
+    });
 };
 
 export const sumarTotales = (dias: DiaJornada[]): TotalesJornada => {
     const laborales = dias.filter((d) => d.estado !== 'no_laboral');
     const hechas = round2(laborales.reduce((s, d) => s + d.horasHechas, 0));
     const legales = round2(laborales.reduce((s, d) => s + d.horasLegales, 0));
+    const diferencia = round2(hechas - legales);
     return {
         horasHechas: hechas,
+        horasHechasFmt: formatHorasReloj(hechas),
         horasLegales: legales,
-        diferencia: round2(hechas - legales),
+        horasLegalesFmt: formatHorasReloj(legales),
+        diferencia,
+        diferenciaFmt: formatHorasRelojSigned(diferencia),
         diasLaborales: laborales.length,
         diasConAlerta: dias.filter((d) => d.alertas.length > 0).length
     };

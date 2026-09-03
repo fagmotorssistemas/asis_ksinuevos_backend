@@ -10,9 +10,11 @@ import {
 } from './marcaciones.interface';
 import { MarcacionesRepository } from './marcaciones.repository';
 import { MarcacionesStore } from './marcaciones.store';
+import { extraerFechaHoraLocal } from './hora.util';
 import {
     calcularJornadaDia,
     fechasLaboralesDelMes,
+    formatHorasReloj,
     mesEstaCerrado,
     sumarTotales
 } from './jornada.service';
@@ -43,13 +45,7 @@ const metodoDesdeEvento = (evento: EventoReloj): string => {
     }
 };
 
-const extraerFechaHora = (time: string): { fecha: string; hora: string; fechaHora: string } => {
-    const fechaHora = time || '';
-    const [fechaRaw = '', horaRaw = '00:00:00'] = fechaHora.split('T');
-    const fecha = fechaRaw.slice(0, 10);
-    const hora = horaRaw.replace('Z', '').slice(0, 8);
-    return { fecha, hora, fechaHora };
-};
+const extraerFechaHora = extraerFechaHoraLocal;
 
 const esFechaIso = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value);
 
@@ -225,14 +221,18 @@ export class MarcacionesService {
             empleados: reporte.usuarios.map((u) => {
                 const dias = u.dias.map((d) => {
                     const diferencia = d.diferencia ?? 0;
+                    const horasHechas = d.horasHechas ?? 0;
+                    const horasLegales = d.horasLegales ?? 0;
                     return {
                         fecha: d.fecha,
                         entrada: horaCorta(d.entrada),
                         almuerzoIda: horaCorta(d.almuerzoIda),
                         almuerzoVuelta: horaCorta(d.almuerzoVuelta),
                         salida: horaCorta(d.salida),
-                        horasHechas: d.horasHechas ?? 0,
-                        horasLegales: d.horasLegales ?? 0,
+                        horasHechas,
+                        horasHechasFmt: d.horasHechasFmt || formatHorasReloj(horasHechas),
+                        horasLegales,
+                        horasLegalesFmt: d.horasLegalesFmt || formatHorasReloj(horasLegales),
                         diferencia,
                         extras: pos(diferencia),
                         deMenos: neg(diferencia),
@@ -249,7 +249,9 @@ export class MarcacionesService {
                     dias,
                     totales: {
                         hechas,
+                        hechasFmt: formatHorasReloj(hechas),
                         legales,
+                        legalesFmt: formatHorasReloj(legales),
                         diferencia,
                         extras: pos(diferencia),
                         deMenos: neg(diferencia)
