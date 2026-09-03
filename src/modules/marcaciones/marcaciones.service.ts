@@ -13,7 +13,7 @@ import { MarcacionesStore } from './marcaciones.store';
 import { extraerFechaHoraLocal } from './hora.util';
 import {
     calcularJornadaDia,
-    fechasLaboralesDelMes,
+    fechasLaboralesDelRango,
     formatHorasReloj,
     mesEstaCerrado,
     aplicarSabadoLibre,
@@ -202,7 +202,7 @@ export class MarcacionesService {
             this.store.getUsuarios(),
             this.store.getEventos(desde, hasta)
         ]);
-        const reporte = this.armarReporte(usuarios, eventos, { desde, hasta }, true);
+        const reporte = this.armarReporte(usuarios, eventos, { desde, hasta });
         const informe = this.aInformeMes(anioMes, cerrado, reporte);
 
         if (cerrado) {
@@ -265,8 +265,7 @@ export class MarcacionesService {
     private armarReporte(
         usuarios: UsuarioReloj[],
         eventos: EventoReloj[],
-        rango: RangoConsulta,
-        completarFaltas = false
+        rango: RangoConsulta
     ): ReporteMarcaciones {
         const marcacionesValidas = eventos.filter((evento) => !MINORS_RECHAZO.has(evento.minor));
         const usuariosPorId = new Map<string, UsuarioReloj>();
@@ -317,29 +316,20 @@ export class MarcacionesService {
             porDia.get(fecha)!.push(marcacion);
         }
 
-        const fechasMes = completarFaltas
-            ? fechasLaboralesDelMes(rango.desde.slice(0, 7))
-            : [];
+        const limite = rango.hasta < hoyIso() ? rango.hasta : hoyIso();
+        const fechas = fechasLaboralesDelRango(rango.desde, limite);
 
         for (const usuario of agrupado.values()) {
             const porDia = diasPorUsuario.get(usuario.employeeNo) || new Map();
-            const fechas = completarFaltas
-                ? fechasMes
-                : Array.from(porDia.keys()).sort((a, b) => a.localeCompare(b));
 
             const dias = fechas.map((fecha) => {
                 const marcas = [...(porDia.get(fecha) || [])].sort((a: Marcacion, b: Marcacion) =>
                     a.hora.localeCompare(b.hora)
                 );
-                if (!marcas.length && completarFaltas) {
-                    return calcularJornadaDia(fecha, []);
-                }
                 return calcularJornadaDia(fecha, marcas);
             });
 
-            const diasFinal = completarFaltas
-                ? aplicarSabadoLibre(dias, rango.hasta < hoyIso() ? rango.hasta : hoyIso())
-                : dias;
+            const diasFinal = aplicarSabadoLibre(dias, limite);
 
             usuario.dias = diasFinal;
             usuario.totalMarcaciones = diasFinal.reduce((sum, dia) => sum + dia.total, 0);

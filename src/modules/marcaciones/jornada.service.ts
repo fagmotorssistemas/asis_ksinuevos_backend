@@ -217,19 +217,31 @@ export const calcularJornadaDia = (fecha: string, marcas: Marcacion[]): DiaJorna
 };
 
 export const aplicarSabadoLibre = (dias: DiaJornada[], hasta: string): DiaJornada[] => {
-    const candidatos = dias
-        .filter(
-            (d) =>
-                d.total === 0 &&
-                d.fecha <= hasta &&
-                horasLegalesDeFecha(d.fecha) === LEGAL_SABADO
-        )
-        .sort((a, b) => a.fecha.localeCompare(b.fecha));
-    if (!candidatos.length) return dias;
+    const fechasLibre = new Set<string>();
+    const porMes = new Map<string, DiaJornada[]>();
+    for (const dia of dias) {
+        const mes = dia.fecha.slice(0, 7);
+        const lista = porMes.get(mes);
+        if (lista) lista.push(dia);
+        else porMes.set(mes, [dia]);
+    }
 
-    const fechaLibre = candidatos[0].fecha;
+    for (const delMes of porMes.values()) {
+        const candidatos = delMes
+            .filter(
+                (d) =>
+                    d.total === 0 &&
+                    d.fecha <= hasta &&
+                    horasLegalesDeFecha(d.fecha) === LEGAL_SABADO
+            )
+            .sort((a, b) => a.fecha.localeCompare(b.fecha));
+        if (candidatos[0]) fechasLibre.add(candidatos[0].fecha);
+    }
+
+    if (!fechasLibre.size) return dias;
+
     return dias.map((d) => {
-        if (d.fecha !== fechaLibre) return d;
+        if (!fechasLibre.has(d.fecha)) return d;
         return {
             ...d,
             horasHechas: 0,
@@ -264,9 +276,26 @@ export const sumarTotales = (dias: DiaJornada[]): TotalesJornada => {
 export const fechasLaboralesDelMes = (anioMes: string): string[] => {
     const [y, m] = anioMes.split('-').map(Number);
     const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const desde = `${anioMes}-01`;
+    const hasta = `${anioMes}-${String(last).padStart(2, '0')}`;
+    return fechasLaboralesDelRango(desde, hasta);
+};
+
+export const fechasLaboralesDelRango = (desde: string, hasta: string): string[] => {
     const out: string[] = [];
-    for (let d = 1; d <= last; d += 1) {
-        const fecha = `${anioMes}-${String(d).padStart(2, '0')}`;
+    const start = Date.UTC(
+        Number(desde.slice(0, 4)),
+        Number(desde.slice(5, 7)) - 1,
+        Number(desde.slice(8, 10))
+    );
+    const end = Date.UTC(
+        Number(hasta.slice(0, 4)),
+        Number(hasta.slice(5, 7)) - 1,
+        Number(hasta.slice(8, 10))
+    );
+    for (let t = start; t <= end; t += 24 * 60 * 60 * 1000) {
+        const d = new Date(t);
+        const fecha = d.toISOString().slice(0, 10);
         if (weekdayIso(fecha) !== 0) out.push(fecha);
     }
     return out;
