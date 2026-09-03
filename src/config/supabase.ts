@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import ws from 'ws';
 
 /**
  * Valores por defecto (proyecto KsiNuevos_Web) — temporal hasta migrar a .env seguro.
@@ -27,7 +28,9 @@ export const getSupabaseAdmin = (): SupabaseClient => {
     }
 
     adminClient = createClient(url, serviceKey, {
-        auth: { persistSession: false, autoRefreshToken: false }
+        auth: { persistSession: false, autoRefreshToken: false },
+        // Node 16 no trae WebSocket nativo; el cliente de Supabase lo exige al iniciar.
+        realtime: { transport: ws as never }
     });
     return adminClient;
 };
