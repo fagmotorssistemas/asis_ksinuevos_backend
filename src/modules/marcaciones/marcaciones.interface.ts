@@ -38,6 +38,24 @@ export interface DiaMarcaciones {
     fecha: string;
     total: number;
     marcaciones: Marcacion[];
+    entrada?: string | null;
+    almuerzoIda?: string | null;
+    almuerzoVuelta?: string | null;
+    salida?: string | null;
+    salidaReal?: boolean;
+    horasHechas?: number;
+    horasLegales?: number;
+    diferencia?: number;
+    estado?: string;
+    alertas?: string[];
+}
+
+export interface TotalesUsuario {
+    horasHechas: number;
+    horasLegales: number;
+    diferencia: number;
+    diasLaborales: number;
+    diasConAlerta: number;
 }
 
 export interface UsuarioMarcaciones {
@@ -47,6 +65,7 @@ export interface UsuarioMarcaciones {
     activo?: boolean;
     totalMarcaciones: number;
     dias: DiaMarcaciones[];
+    totales?: TotalesUsuario;
 }
 
 export interface ResumenMarcaciones {
@@ -58,11 +77,47 @@ export interface ResumenMarcaciones {
     desde: string;
     hasta: string;
     fechaConsulta: string;
+    fuente?: 'supabase' | 'reloj';
+    ultimaSync?: string | null;
 }
 
 export interface ReporteMarcaciones {
     resumen: ResumenMarcaciones;
     usuarios: UsuarioMarcaciones[];
+}
+
+export interface DiaInformeMes {
+    fecha: string;
+    entrada: string | null;
+    almuerzoIda: string | null;
+    almuerzoVuelta: string | null;
+    salida: string | null;
+    horasHechas: number;
+    horasLegales: number;
+    diferencia: number;
+    extras: number;
+    deMenos: number;
+    estado: string;
+    alertas: string[];
+}
+
+export interface EmpleadoInformeMes {
+    empleado: string;
+    employeeNo: string;
+    dias: DiaInformeMes[];
+    totales: {
+        hechas: number;
+        legales: number;
+        diferencia: number;
+        extras: number;
+        deMenos: number;
+    };
+}
+
+export interface InformeMes {
+    mes: string;
+    cerrado: boolean;
+    empleados: EmpleadoInformeMes[];
 }
 
 export interface RangoConsulta {

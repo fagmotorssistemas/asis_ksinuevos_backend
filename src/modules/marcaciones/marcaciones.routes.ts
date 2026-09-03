@@ -1,12 +1,19 @@
 import { Router } from 'express';
-import { getReporteMarcaciones } from './marcaciones.controller';
+import {
+    getMesMarcaciones,
+    getReporteMarcaciones,
+    postSyncMarcaciones
+} from './marcaciones.controller';
 
 const router = Router();
 
-// GET /api/marcaciones/reporte
-// Usuarios del reloj + marcaciones de cada uno, agrupadas por día.
-// Opcional: ?desde=2024-01-01&hasta=2026-08-21  (YYYY-MM-DD)
-// Sin fechas: desde julio 2026 hasta hoy.
+// Lectura rápida desde Supabase. Sync incremental al reloj solo si los datos están viejos.
 router.get('/reporte', getReporteMarcaciones);
+
+// Reporte oficial del mes. Si el mes ya cerró, se congela en Supabase.
+router.get('/mes/:anioMes', getMesMarcaciones);
+
+// Fuerza bajar marcas nuevas del reloj a Supabase.
+router.post('/sync', postSyncMarcaciones);
 
 export default router;

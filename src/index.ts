@@ -108,6 +108,8 @@ const startServer = async () => {
             console.log(`🗑️  Borrar adjunto:   DELETE http://localhost:${PORT}/api/comprobantes/:ccoCodigo/imagenes/:ccoSecuencia`);
             console.log('--- Módulo Marcaciones ---');
             console.log(`🕒 Reporte reloj:    http://localhost:${PORT}/api/marcaciones/reporte`);
+            console.log(`📅 Mes oficial:      http://localhost:${PORT}/api/marcaciones/mes/2026-08`);
+            console.log(`🔄 Sync reloj:       POST http://localhost:${PORT}/api/marcaciones/sync`);
             console.log('---------------------------------------------------------');
         });
 
